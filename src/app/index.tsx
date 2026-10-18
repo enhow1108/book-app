@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ChildSwitcher } from '@/components/child-switcher';
 import { Button, Field } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -12,7 +13,7 @@ import { useStore } from '@/data/store';
 import type { BookLanguage } from '@/data/types';
 
 export default function BookshelfScreen() {
-  const { books, addBook, removeBook } = useStore();
+  const { activeChild, books, addBook, removeBook } = useStore();
   const [isbn, setIsbn] = useState('');
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -46,7 +47,8 @@ export default function BookshelfScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content}>
-          <ThemedText type="subtitle">我的書架</ThemedText>
+          <ThemedText type="subtitle">{activeChild ? `${activeChild.name}的書架` : '我的書架'}</ThemedText>
+          <ChildSwitcher />
 
           <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText type="smallBold">加一本書</ThemedText>
@@ -66,7 +68,7 @@ export default function BookshelfScreen() {
               <Button title="中文" selected={language === 'zh'} onPress={() => setLanguage('zh')} />
               <Button title="English" selected={language === 'en'} onPress={() => setLanguage('en')} />
             </View>
-            <Button title="加入書架" onPress={onAdd} disabled={!title.trim()} />
+            <Button title="加入書架" onPress={onAdd} disabled={!title.trim() || !activeChild} />
           </ThemedView>
 
           {books.length === 0 ? (

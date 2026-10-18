@@ -27,6 +27,11 @@ export default function AppTabs() {
           renderingMode="template"
         />
       </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="children">
+        <NativeTabs.Trigger.Label>孩子</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="person.2" md="group" />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

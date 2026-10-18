@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ChildSwitcher } from '@/components/child-switcher';
 import { Button, Field } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -16,7 +17,8 @@ export default function CheckinScreen() {
   const [note, setNote] = useState('');
 
   const minutesValue = Number.parseInt(minutes, 10);
-  const canSave = !!bookId && minutesValue > 0;
+  // The picked book may belong to another child after switching profiles.
+  const canSave = books.some((b) => b.id === bookId) && minutesValue > 0;
   const totalMinutes = logs.reduce((sum, l) => sum + l.minutes, 0);
   const titleOf = (id: string) => books.find((b) => b.id === id)?.title ?? '已移除的書';
 
@@ -31,6 +33,7 @@ export default function CheckinScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content}>
           <ThemedText type="subtitle">今日打卡</ThemedText>
+          <ChildSwitcher />
 
           <View style={styles.stats}>
             <Stat label="連續天數" value={currentStreak(logs)} />
