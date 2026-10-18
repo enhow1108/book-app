@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChildSwitcher } from '@/components/child-switcher';
 import { Button, Field } from '@/components/form';
+import { IsbnScanner } from '@/components/isbn-scanner';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -20,10 +21,11 @@ export default function BookshelfScreen() {
   const [language, setLanguage] = useState<BookLanguage>('zh');
   const [coverUrl, setCoverUrl] = useState<string>();
   const [looking, setLooking] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
-  async function onLookup() {
+  async function onLookup(code = isbn) {
     setLooking(true);
-    const found = await lookupIsbn(isbn);
+    const found = await lookupIsbn(code);
     setLooking(false);
     if (!found) {
       Alert.alert('查無此書', '可以手動輸入書名與作者。');
@@ -33,6 +35,12 @@ export default function BookshelfScreen() {
     setAuthor(found.author);
     setLanguage(found.language);
     setCoverUrl(found.coverUrl);
+  }
+
+  function onScanned(code: string) {
+    setScanning(false);
+    setIsbn(code);
+    onLookup(code);
   }
 
   function onAdd() {
@@ -60,7 +68,8 @@ export default function BookshelfScreen() {
                 value={isbn}
                 onChangeText={setIsbn}
               />
-              <Button title={looking ? '查詢中…' : '查詢'} onPress={onLookup} disabled={!isbn || looking} />
+              <Button title="掃描" onPress={() => setScanning(true)} disabled={looking} />
+              <Button title={looking ? '查詢中…' : '查詢'} onPress={() => onLookup()} disabled={!isbn || looking} />
             </View>
             <Field placeholder="書名" value={title} onChangeText={setTitle} />
             <Field placeholder="作者" value={author} onChangeText={setAuthor} />
@@ -93,6 +102,7 @@ export default function BookshelfScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
+      {scanning ? <IsbnScanner onScanned={onScanned} onClose={() => setScanning(false)} /> : null}
     </ThemedView>
   );
 }
