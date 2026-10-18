@@ -10,22 +10,11 @@ export type Book = {
   addedAt: string;
 };
 
-/** A child profile under the parent. Kept minimal on purpose: no photos, only a birth year. */
-export type Child = {
-  id: string;
-  name: string;
-  birthYear: number;
-  avatar: string;
-};
-
 export type ReadingLog = {
   id: string;
-  childId: string;
   bookId: string;
   minutes: number;
   note?: string;
   /** Local calendar day, YYYY-MM-DD. */
   date: string;
 };
-
-export const AVATARS = ['🐻', '🐰', '🦊', '🐼', '🐯', '🐨', '🐸', '🦁'];
