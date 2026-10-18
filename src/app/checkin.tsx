@@ -10,13 +10,14 @@ import { booksThisMonth, currentStreak, toDayKey } from '@/data/dates';
 import { useStore } from '@/data/store';
 
 export default function CheckinScreen() {
-  const { books, logs, addLog } = useStore();
+  const { books, logs: allLogs, children, activeChild, setActiveChild, addLog } = useStore();
   const [bookId, setBookId] = useState<string>();
   const [minutes, setMinutes] = useState('15');
   const [note, setNote] = useState('');
 
+  const logs = allLogs.filter((l) => l.childId === activeChild?.id);
   const minutesValue = Number.parseInt(minutes, 10);
-  const canSave = !!bookId && minutesValue > 0;
+  const canSave = !!activeChild && !!bookId && minutesValue > 0;
   const totalMinutes = logs.reduce((sum, l) => sum + l.minutes, 0);
   const titleOf = (id: string) => books.find((b) => b.id === id)?.title ?? '已移除的書';
 
@@ -31,6 +32,21 @@ export default function CheckinScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content}>
           <ThemedText type="subtitle">今日打卡</ThemedText>
+
+          {children.length === 0 ? (
+            <ThemedText themeColor="textSecondary">先到「孩子」分頁加一個孩子。</ThemedText>
+          ) : (
+            <View style={styles.chips}>
+              {children.map((c) => (
+                <Button
+                  key={c.id}
+                  title={`${c.avatar} ${c.name}`}
+                  selected={c.id === activeChild?.id}
+                  onPress={() => setActiveChild(c.id)}
+                />
+              ))}
+            </View>
+          )}
 
           <View style={styles.stats}>
             <Stat label="連續天數" value={currentStreak(logs)} />

@@ -24,6 +24,9 @@ export default function AppTabs() {
           <TabTrigger name="home" href="/" asChild>
             <TabButton>書架</TabButton>
           </TabTrigger>
+          <TabTrigger name="children" href="/children" asChild>
+            <TabButton>孩子</TabButton>
+          </TabTrigger>
           <TabTrigger name="checkin" href="/checkin" asChild>
             <TabButton>打卡</TabButton>
           </TabTrigger>
