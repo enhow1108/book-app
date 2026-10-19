@@ -38,7 +38,7 @@ const SORTS: { value: Sort; label: string }[] = [
 export default function BookshelfScreen() {
   const { activeChild, books, logs, library } = useStore();
   const [adding, setAdding] = useState(false);
-  const [filter, setFilter] = useState<BookStatus | 'all'>('all');
+  const [filter, setFilter] = useState<BookStatus | 'unread' | 'all'>('all');
   const [sort, setSort] = useState<Sort>('recent');
   const [view, setView] = useState<ShelfView>('shelf');
   const [search, setSearch] = useState('');
@@ -47,7 +47,8 @@ export default function BookshelfScreen() {
 
   const stats = useMemo(() => bookStats(logs), [logs]);
   const readsOf = (id: string) => stats.get(id)?.times ?? 0;
-  const statusOf = (b: Book) => b.status ?? 'reading';
+  // Books only a sibling has on their shelf so far count as not yet read by this child.
+  const statusOf = (b: Book) => (b.shelved ? (b.status ?? 'reading') : 'unread');
   const query = search.trim().toLowerCase();
 
   const sorted =
@@ -59,16 +60,16 @@ export default function BookshelfScreen() {
   const shown = sorted.filter(
     (b) =>
       (filter === 'all' || statusOf(b) === filter) &&
-      (!query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query))
+      (!query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query)),
   );
-  const count = (status: BookStatus) => books.filter((b) => statusOf(b) === status).length;
+  const count = (status: BookStatus | 'unread') => books.filter((b) => statusOf(b) === status).length;
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.header}>
-            <ThemedText type="subtitle">{activeChild ? `${activeChild.name}的書架` : '我的書架'}</ThemedText>
+            <ThemedText type="subtitle">全家的書架</ThemedText>
             {!adding && activeChild ? <Button title="＋ 加一本書" onPress={() => setAdding(true)} /> : null}
           </View>
           <ChildSwitcher />
@@ -78,7 +79,7 @@ export default function BookshelfScreen() {
           {books.length > 0 ? (
             <View style={styles.stats}>
               <Stat value={books.length} label="本書" />
-              <Stat value={count('done')} label="本讀完了" />
+              <Stat value={count('done')} label={activeChild ? `${activeChild.name}讀完` : '本讀完了'} />
               <Stat value={readCount(logs)} label="次閱讀" />
             </View>
           ) : null}
@@ -98,52 +99,77 @@ export default function BookshelfScreen() {
                 <ReadingCalendar logs={logs} library={library} onOpenBook={setOpenBookId} />
               ) : (
                 <>
-              <View style={styles.chips}>
-                <Button title={`全部 ${books.length}`} selected={filter === 'all'} onPress={() => setFilter('all')} />
-                {STATUSES.map((s) => (
-                  <Button
-                    key={s.value}
-                    title={`${s.label} ${count(s.value)}`}
-                    selected={filter === s.value}
-                    onPress={() => setFilter(s.value)}
-                  />
-                ))}
-              </View>
-              <View style={styles.toolbar}>
-                <View style={styles.chips}>
-                  {SORTS.map((s) => (
-                    <Button key={s.value} title={s.label} selected={sort === s.value} onPress={() => setSort(s.value)} />
-                  ))}
-                </View>
-              </View>
-              {books.length > 5 ? <Field placeholder="找書名或作者" value={search} onChangeText={setSearch} /> : null}
+                  <View style={styles.chips}>
+                    <Button
+                      title={`全部 ${books.length}`}
+                      selected={filter === 'all'}
+                      onPress={() => setFilter('all')}
+                    />
+                    {STATUSES.map((s) => (
+                      <Button
+                        key={s.value}
+                        title={`${s.label} ${count(s.value)}`}
+                        selected={filter === s.value}
+                        onPress={() => setFilter(s.value)}
+                      />
+                    ))}
+                    {count('unread') > 0 ? (
+                      <Button
+                        title={`還沒讀 ${count('unread')}`}
+                        selected={filter === 'unread'}
+                        onPress={() => setFilter('unread')}
+                      />
+                    ) : null}
+                  </View>
+                  <View style={styles.toolbar}>
+                    <View style={styles.chips}>
+                      {SORTS.map((s) => (
+                        <Button
+                          key={s.value}
+                          title={s.label}
+                          selected={sort === s.value}
+                          onPress={() => setSort(s.value)}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                  {books.length > 5 ? (
+                    <Field placeholder="找書名或作者" value={search} onChangeText={setSearch} />
+                  ) : null}
 
-              {shown.length === 0 ? (
-                <ThemedText themeColor="textSecondary">這裡還沒有書。</ThemedText>
-              ) : view === 'shelf' ? (
-                <WoodShelf books={shown.slice(0, limit)} onPress={(b) => setOpenBookId(b.id)} />
-              ) : (
-                shown.slice(0, limit).map((book) => (
-                  <Pressable key={book.id} onPress={() => setOpenBookId(book.id)}>
-                    <ThemedView type="backgroundElement" style={styles.bookRow}>
-                      <BookCover book={book} />
-                      <View style={styles.grow}>
-                        <ThemedText type="smallBold" numberOfLines={2}>
-                          {book.title}
-                        </ThemedText>
-                        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                          {[book.author, STATUSES.find((s) => s.value === statusOf(book))?.label, `${readsOf(book.id)} 次`]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </ThemedText>
-                      </View>
-                    </ThemedView>
-                  </Pressable>
-                ))
-              )}
-              {shown.length > limit ? (
-                <Button title={`再顯示 ${Math.min(PAGE, shown.length - limit)} 本`} onPress={() => setLimit(limit + PAGE)} />
-              ) : null}
+                  {shown.length === 0 ? (
+                    <ThemedText themeColor="textSecondary">這裡還沒有書。</ThemedText>
+                  ) : view === 'shelf' ? (
+                    <WoodShelf books={shown.slice(0, limit)} onPress={(b) => setOpenBookId(b.id)} />
+                  ) : (
+                    shown.slice(0, limit).map((book) => (
+                      <Pressable key={book.id} onPress={() => setOpenBookId(book.id)}>
+                        <ThemedView type="backgroundElement" style={styles.bookRow}>
+                          <BookCover book={book} />
+                          <View style={styles.grow}>
+                            <ThemedText type="smallBold" numberOfLines={2}>
+                              {book.title}
+                            </ThemedText>
+                            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                              {[
+                                book.author,
+                                STATUSES.find((s) => s.value === statusOf(book))?.label,
+                                `${readsOf(book.id)} 次`,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </ThemedText>
+                          </View>
+                        </ThemedView>
+                      </Pressable>
+                    ))
+                  )}
+                  {shown.length > limit ? (
+                    <Button
+                      title={`再顯示 ${Math.min(PAGE, shown.length - limit)} 本`}
+                      onPress={() => setLimit(limit + PAGE)}
+                    />
+                  ) : null}
                 </>
               )}
             </>

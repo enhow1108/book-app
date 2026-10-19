@@ -48,7 +48,8 @@ export type ShelfEntry = {
 };
 
 /** A library book as it sits on the active child's shelf. */
-export type Book = LibraryBook & { childId: string; status?: BookStatus };
+/** A family book as seen by one child; `shelved` is false for a book only a sibling has read so far. */
+export type Book = LibraryBook & { childId: string; status?: BookStatus; shelved?: boolean };
 
 export type ReadingLog = {
   id: string;

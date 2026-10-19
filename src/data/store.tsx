@@ -16,7 +16,7 @@ import {
   type LegacyState,
   type State,
 } from './library';
-import type { Book, Child, ImportRecord, LibraryBook, ReadingLog, ReadingMode } from './types';
+import type { Book, BookStatus, Child, ImportRecord, LibraryBook, ReadingLog, ReadingMode } from './types';
 
 // Where everything was kept before the database: one JSON string per version.
 const LEGACY_KEY = 'book-app/state/v2';
@@ -26,7 +26,7 @@ type Store = {
   loaded: boolean;
   children: Child[];
   activeChild?: Child;
-  /** Books on the active child's shelf, and the active child's logs. */
+  /** The whole family's books, each with the active child's status; and the active child's logs. */
   books: Book[];
   logs: ReadingLog[];
   /** The whole family's library and logs, for the history page. */
@@ -78,10 +78,18 @@ async function loadState(): Promise<{ state: State; firstSave?: Changes }> {
   };
 }
 
-/** Removes books no shelf holds any more. */
-function dropUnshelved(s: State): State {
+/** Removes the given books from the family library if no shelf holds them any more. */
+function dropUnshelved(s: State, bookIds: Iterable<string>): State {
   const used = new Set(s.shelf.map((e) => e.bookId));
-  return s.books.every((b) => used.has(b.id)) ? s : { ...s, books: s.books.filter((b) => used.has(b.id)) };
+  const drop = new Set([...bookIds].filter((id) => !used.has(id)));
+  return drop.size ? { ...s, books: s.books.filter((b) => !drop.has(b.id)) } : s;
+}
+
+/** Puts a family book on a child's own shelf, e.g. the first time they read it. */
+function onShelf(s: State, childId: string, bookId: string, status?: BookStatus): State {
+  const id = shelfId(childId, bookId);
+  if (s.shelf.some((e) => e.id === id)) return s;
+  return { ...s, shelf: [{ id, childId, bookId, status, addedAt: new Date().toISOString() }, ...s.shelf] };
 }
 
 /** Keeps child profiles, the family library, bookshelves and reading logs in a database on the device. */
@@ -116,14 +124,16 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
   const activeChild = state.children.find((c) => c.id === state.activeChildId);
   const activeId = activeChild?.id;
 
+  // The bookshelf is shared: every child sees every family book, so a book scanned for one is ready for the others.
   const books = useMemo(() => {
-    const byId = new Map(state.books.map((b) => [b.id, b]));
-    const shelved: Book[] = [];
-    for (const e of state.shelf) {
-      const book = e.childId === activeId ? byId.get(e.bookId) : undefined;
-      if (book) shelved.push({ ...book, childId: e.childId, status: e.status, addedAt: e.addedAt });
-    }
-    return shelved;
+    if (!activeId) return [];
+    const entries = new Map(state.shelf.filter((e) => e.childId === activeId).map((e) => [e.bookId, e]));
+    return state.books.map((book): Book => {
+      const e = entries.get(book.id);
+      return e
+        ? { ...book, childId: activeId, status: e.status, addedAt: e.addedAt, shelved: true }
+        : { ...book, childId: activeId, shelved: false };
+    });
   }, [state.books, state.shelf, activeId]);
   const logs = useMemo(() => state.logs.filter((l) => l.childId === activeId), [state.logs, activeId]);
 
@@ -147,13 +157,14 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
     removeChild: (id) =>
       setState((s) => {
         const children = s.children.filter((c) => c.id !== id);
-        return dropUnshelved({
+        // The child's books stay on the family shelf for their siblings.
+        return {
           ...s,
           children,
           activeChildId: s.activeChildId === id ? children[0]?.id : s.activeChildId,
           shelf: s.shelf.filter((e) => e.childId !== id),
           logs: s.logs.filter((l) => l.childId !== id),
-        });
+        };
       }),
     setActiveChild: (id) => setState((s) => ({ ...s, activeChildId: id })),
     addBook: ({ status, ...book }) =>
@@ -180,7 +191,8 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
         const next = { ...s };
         if (Object.keys(patch).length) next.books = s.books.map((b) => (b.id === id ? { ...b, ...patch } : b));
         if (status && childId) {
-          next.shelf = s.shelf.map((e) => (e.id === shelfId(childId, id) ? { ...e, status } : e));
+          const shelved = onShelf(next, childId, id, status);
+          next.shelf = shelved.shelf.map((e) => (e.id === shelfId(childId, id) ? { ...e, status } : e));
         }
         return next;
       }),
@@ -188,15 +200,24 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
       setState((s) => {
         const childId = s.activeChildId;
         if (!childId) return s;
-        return dropUnshelved({
-          ...s,
-          shelf: s.shelf.filter((e) => e.id !== shelfId(childId, id)),
-          logs: s.logs.filter((l) => !(l.bookId === id && l.childId === childId)),
-        });
+        return dropUnshelved(
+          {
+            ...s,
+            shelf: s.shelf.filter((e) => e.id !== shelfId(childId, id)),
+            logs: s.logs.filter((l) => !(l.bookId === id && l.childId === childId)),
+          },
+          [id],
+        );
       }),
     addLog: (log) =>
       setState((s) =>
-        s.activeChildId ? { ...s, logs: [{ ...log, id: newId(), childId: s.activeChildId }, ...s.logs] } : s
+        s.activeChildId
+          ? onShelf(
+              { ...s, logs: [{ ...log, id: newId(), childId: s.activeChildId }, ...s.logs] },
+              s.activeChildId,
+              log.bookId,
+            )
+          : s,
       ),
     changeReadsToday: (bookId, delta, mode) =>
       setState((s) => {
@@ -206,13 +227,17 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
         // Quick reads of a book on a given day, done the same way, share one log without a note.
         const quickToday = s.logs.filter(
           (l) =>
-            l.childId === childId && l.bookId === bookId && l.date === date && !l.minutes && !l.note && !l.importId
+            l.childId === childId && l.bookId === bookId && l.date === date && !l.minutes && !l.note && !l.importId,
         );
         // Undoing falls back to any of today's quick reads, in case the mode was switched since.
         const quick = quickToday.find((l) => l.mode === mode) ?? (delta < 0 ? quickToday[0] : undefined);
         if (!quick) {
           if (delta < 0) return s;
-          return { ...s, logs: [{ id: newId(), childId, bookId, date, times: 1, mode }, ...s.logs] };
+          return onShelf(
+            { ...s, logs: [{ id: newId(), childId, bookId, date, times: 1, mode }, ...s.logs] },
+            childId,
+            bookId,
+          );
         }
         const times = (quick.times ?? 1) + delta;
         return {
@@ -243,12 +268,15 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
         const logs = s.logs.filter((l) => l.importId !== id);
         // Imported shelf entries stay if the child has since read the book in the app.
         const stillRead = new Set(logs.map((l) => shelfId(l.childId, l.bookId)));
-        return dropUnshelved({
-          ...s,
-          logs,
-          shelf: s.shelf.filter((e) => e.importId !== id || stillRead.has(e.id)),
-          imports: s.imports.filter((r) => r.id !== id),
-        });
+        return dropUnshelved(
+          {
+            ...s,
+            logs,
+            shelf: s.shelf.filter((e) => e.importId !== id || stillRead.has(e.id)),
+            imports: s.imports.filter((r) => r.id !== id),
+          },
+          s.books.filter((b) => b.importId === id).map((b) => b.id),
+        );
       }),
   };
 
