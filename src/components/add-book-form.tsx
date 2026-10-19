@@ -33,6 +33,10 @@ export function AddBookForm({ onClose }: { onClose: () => void }) {
     setLooking(false);
     if (!found) {
       // Switch to typing it in: the ISBN stays, and the parent fills in the rest and can photograph the cover.
+      // Clear anything left from an earlier lookup so it isn't mistaken for this book.
+      setTitle('');
+      setAuthor('');
+      setCoverUrl(undefined);
       setNotFound(true);
       return;
     }
