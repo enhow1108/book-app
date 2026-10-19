@@ -15,7 +15,7 @@ import { useStore } from '@/data/store';
 import type { ReadingMode } from '@/data/types';
 
 export default function CheckinScreen() {
-  const { books, logs, addLog, changeReadsToday } = useStore();
+  const { activeChild, children, books, logs, allLogs, addLog, changeReadsToday } = useStore();
   const [bookId, setBookId] = useState<string>();
   const [search, setSearch] = useState('');
   const [mode, setMode] = useState<ReadingMode>('self');
@@ -25,9 +25,10 @@ export default function CheckinScreen() {
   const canSave = books.some((b) => b.id === bookId) && note.trim().length > 0;
   const today = toDayKey(new Date());
   const query = search.trim().toLowerCase();
-  const ordered = useMemo(() => recentBooks(books, logs), [books, logs]);
+  // Ordered by the whole family's reading, so a book a sibling read today is right at the top to add.
+  const ordered = useMemo(() => recentBooks(books, allLogs), [books, allLogs]);
   const matching = ordered.filter(
-    (b) => !query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query)
+    (b) => !query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query),
   );
   // Only the most recent few, since an imported library can hold thousands of books.
   const recent = matching.slice(0, query ? 20 : 10);
@@ -37,6 +38,20 @@ export default function CheckinScreen() {
   const totals = useMemo(() => bookStats(logs), [logs]);
   const todays = useMemo(() => bookStats(logs.filter((l) => l.date === today)), [logs, today]);
   const readsOf = (id: string, day?: string) => (day ? todays : totals).get(id)?.times ?? 0;
+  const siblingsToday = useMemo(() => {
+    const names = new Map(children.filter((c) => c.id !== activeChild?.id).map((c) => [c.id, c.name]));
+    const byBook = new Map<string, Map<string, number>>();
+    for (const l of allLogs) {
+      const name = l.date === today ? names.get(l.childId) : undefined;
+      if (!name) continue;
+      const counts = byBook.get(l.bookId) ?? new Map<string, number>();
+      counts.set(name, (counts.get(name) ?? 0) + (l.times ?? 1));
+      byBook.set(l.bookId, counts);
+    }
+    return byBook;
+  }, [allLogs, children, activeChild?.id, today]);
+  const siblingsLine = (id: string) =>
+    [...(siblingsToday.get(id) ?? [])].map(([name, times]) => `${name}今天 ${times} 次`).join(' · ');
   const titles = useMemo(() => new Map(books.map((b) => [b.id, b.title])), [books]);
   const titleOf = (id: string) => titles.get(id) ?? '已移除的書';
 
@@ -72,7 +87,7 @@ export default function CheckinScreen() {
 
           {books.length > 0 ? (
             <ThemedView type="backgroundElement" style={styles.card}>
-              <ThemedText type="smallBold">最近讀的書</ThemedText>
+              <ThemedText type="smallBold">全家最近讀的書</ThemedText>
               {books.length > 5 ? <Field placeholder="找書名或作者" value={search} onChangeText={setSearch} /> : null}
               {recent.map((book) => {
                 const todayReads = readsOf(book.id, today);
@@ -87,6 +102,11 @@ export default function CheckinScreen() {
                       <ThemedText type="small" themeColor="textSecondary">
                         {allReads ? `今天 ${todayReads} 次 · 共 ${allReads} 次` : '還沒讀過'}
                       </ThemedText>
+                      {siblingsLine(book.id) ? (
+                        <ThemedText type="small" themeColor="textSecondary">
+                          {siblingsLine(book.id)}
+                        </ThemedText>
+                      ) : null}
                     </View>
                     {todayReads > 0 ? <Button title="−" onPress={() => changeReadsToday(book.id, -1, mode)} /> : null}
                     <Button title={`${modeLabel(mode)} +1`} onPress={() => changeReadsToday(book.id, 1, mode)} />
@@ -122,9 +142,7 @@ export default function CheckinScreen() {
             <ThemedView key={log.id} type="backgroundElement" style={styles.logRow}>
               <ThemedText type="smallBold">{titleOf(log.bookId)}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {[log.date, modeLabel(log.mode), `${log.times ?? 1} 次`, log.note ?? '']
-                  .filter(Boolean)
-                  .join(' · ')}
+                {[log.date, modeLabel(log.mode), `${log.times ?? 1} 次`, log.note ?? ''].filter(Boolean).join(' · ')}
               </ThemedText>
             </ThemedView>
           ))}
