@@ -12,11 +12,13 @@ import { readCount } from '@/data/dates';
 import { bookStats, groupHistory, PERIODS, type HistoryGroup, type Period } from '@/data/history';
 import { titleKey } from '@/data/library';
 import { useStore } from '@/data/store';
+import { useChildTint } from '@/hooks/use-child-tint';
 
 const PAGE = 20;
 const BOOKS_PER_GROUP = 8;
 
 export default function HistoryScreen() {
+  const tint = useChildTint();
   const { activeChild, children, library, logs, allLogs } = useStore();
   const [family, setFamily] = useState(false);
   const [view, setView] = useState<'timeline' | 'books'>('timeline');
@@ -50,7 +52,7 @@ export default function HistoryScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, tint && { backgroundColor: tint }]}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content}>
           <ThemedText type="subtitle">閱讀紀錄</ThemedText>

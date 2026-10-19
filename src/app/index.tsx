@@ -16,6 +16,7 @@ import { readCount, recentBooks } from '@/data/dates';
 import { bookStats } from '@/data/history';
 import { STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
+import { useChildTint } from '@/hooks/use-child-tint';
 import type { Book, BookStatus } from '@/data/types';
 
 /** Books drawn at a time; imported libraries can hold thousands. */
@@ -36,6 +37,7 @@ const SORTS: { value: Sort; label: string }[] = [
 ];
 
 export default function BookshelfScreen() {
+  const tint = useChildTint();
   const { activeChild, books, logs, library } = useStore();
   const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState<BookStatus | 'unread' | 'all'>('all');
@@ -65,7 +67,7 @@ export default function BookshelfScreen() {
   const count = (status: BookStatus | 'unread') => books.filter((b) => statusOf(b) === status).length;
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, tint && { backgroundColor: tint }]}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.header}>

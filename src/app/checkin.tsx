@@ -12,9 +12,11 @@ import { booksThisMonth, currentStreak, readCount, recentBooks, toDayKey } from 
 import { bookStats } from '@/data/history';
 import { modeLabel, READING_MODES } from '@/data/status';
 import { useStore } from '@/data/store';
+import { useChildTint } from '@/hooks/use-child-tint';
 import type { ReadingMode } from '@/data/types';
 
 export default function CheckinScreen() {
+  const tint = useChildTint();
   const { activeChild, children, books, logs, allLogs, addLog, changeReadsToday } = useStore();
   const [bookId, setBookId] = useState<string>();
   const [search, setSearch] = useState('');
@@ -62,7 +64,7 @@ export default function CheckinScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, tint && { backgroundColor: tint }]}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content}>
           <ThemedText type="subtitle">今日打卡</ThemedText>
