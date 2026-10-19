@@ -10,14 +10,25 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { pickCoverPhoto } from '@/data/cover-photo';
 import { readCount, toDayKey } from '@/data/dates';
-import { READING_MODES, STATUSES } from '@/data/status';
+import { modeLabel, READING_MODES, STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
 import type { ReadingMode } from '@/data/types';
+
+const HISTORY_ROWS = 10;
+const WEEKDAYS = '日一二三四五六';
+
+/** 2026-10-19 → 10/19, or with the year and weekday when the list may span years. */
+function shortDate(day: string, full = false) {
+  const d = new Date(`${day}T00:00:00`);
+  const md = `${d.getMonth() + 1}/${d.getDate()}`;
+  return full ? `${d.getFullYear()}/${md}（${WEEKDAYS[d.getDay()]}）` : md;
+}
 
 /** Full-screen page for one book: its cover, reading status, read counts and removal. */
 export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () => void }) {
   const { activeChild, children, books, logs, allLogs, state, updateBook, removeBook, changeReadsToday } = useStore();
   const [mode, setMode] = useState<ReadingMode>('self');
+  const [showAll, setShowAll] = useState(false);
   const book = books.find((b) => b.id === bookId);
   if (!book) return null;
 
@@ -30,10 +41,13 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
   })).filter((m) => m.count > 0);
   const status = book.shelved ? (book.status ?? 'reading') : undefined;
   // The shelf is shared, so show how every child has got on with this book.
-  const family = children.map((c) => ({
-    name: c.name,
-    reads: readCount(allLogs.filter((l) => l.childId === c.id && l.bookId === book.id)),
-  }));
+  const familyLogs = allLogs.filter((l) => l.bookId === book.id).sort((a, b) => b.date.localeCompare(a.date));
+  const nameOf = new Map(children.map((c) => [c.id, c.name]));
+  const family = children.map((c) => {
+    const own = familyLogs.filter((l) => l.childId === c.id);
+    return { id: c.id, name: c.name, reads: readCount(own), last: own[0]?.date };
+  });
+  const shownLogs = showAll ? familyLogs : familyLogs.slice(0, HISTORY_ROWS);
   const siblingsHaveIt = state.shelf.some((e) => e.bookId === book.id && e.childId !== activeChild?.id);
 
   async function onPhoto(from: 'camera' | 'library') {
@@ -72,11 +86,13 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
               <ThemedText type="small" themeColor="textSecondary">
                 {[book.author, book.language === 'zh' ? '中文' : 'English'].filter(Boolean).join(' · ')}
               </ThemedText>
-              {family.length > 1 ? (
-                <ThemedText type="small" themeColor="textSecondary">
-                  {family.map((f) => (f.reads ? `${f.name}讀過 ${f.reads} 次` : `${f.name}還沒讀`)).join(' · ')}
-                </ThemedText>
-              ) : null}
+              {family.length > 1
+                ? family.map((f) => (
+                    <ThemedText key={f.id} type="small" themeColor="textSecondary">
+                      {f.reads ? `${f.name}讀過 ${f.reads} 次，最近一次 ${shortDate(f.last!)}` : `${f.name}還沒讀`}
+                    </ThemedText>
+                  ))
+                : null}
             </View>
 
             <View style={styles.row}>
@@ -110,6 +126,30 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
               </View>
             </ThemedView>
 
+            {familyLogs.length ? (
+              <ThemedView type="backgroundElement" style={[styles.card, styles.history]}>
+                <ThemedText type="smallBold">閱讀紀錄</ThemedText>
+                {shownLogs.map((l) => (
+                  <View key={l.id} style={styles.historyRow}>
+                    <ThemedText type="small" style={styles.historyDate}>
+                      {shortDate(l.date, true)}
+                    </ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary" style={styles.grow}>
+                      {[nameOf.get(l.childId), modeLabel(l.mode), `${l.times ?? 1} 次`, l.note]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </ThemedText>
+                  </View>
+                ))}
+                {familyLogs.length > HISTORY_ROWS ? (
+                  <Button
+                    title={showAll ? '收起' : `顯示全部 ${familyLogs.length} 筆`}
+                    onPress={() => setShowAll(!showAll)}
+                  />
+                ) : null}
+              </ThemedView>
+            ) : null}
+
             {book.shelved ? (
               <View style={styles.row}>
                 <Button title="移除這本書" onPress={onRemove} />
@@ -131,4 +171,8 @@ const styles = StyleSheet.create({
   title: { textAlign: 'center' },
   row: { flexDirection: 'row', gap: Spacing.two, justifyContent: 'center', flexWrap: 'wrap' },
   card: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.two, alignItems: 'center' },
+  history: { alignItems: 'stretch' },
+  historyRow: { flexDirection: 'row', gap: Spacing.two },
+  historyDate: { minWidth: 120 },
+  grow: { flex: 1 },
 });
