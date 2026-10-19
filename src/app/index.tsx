@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,9 +12,13 @@ import { ThemedView } from '@/components/themed-view';
 import { WoodShelf } from '@/components/wood-shelf';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { readCount, recentBooks } from '@/data/dates';
+import { bookStats } from '@/data/history';
 import { STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
 import type { Book, BookStatus } from '@/data/types';
+
+/** Books drawn at a time; imported libraries can hold thousands. */
+const PAGE = 60;
 
 type Sort = 'recent' | 'added' | 'most';
 const SORTS: { value: Sort; label: string }[] = [
@@ -31,8 +35,10 @@ export default function BookshelfScreen() {
   const [view, setView] = useState<'shelf' | 'list'>('shelf');
   const [search, setSearch] = useState('');
   const [openBookId, setOpenBookId] = useState<string>();
+  const [limit, setLimit] = useState(PAGE);
 
-  const readsOf = (id: string) => readCount(logs.filter((l) => l.bookId === id));
+  const stats = useMemo(() => bookStats(logs), [logs]);
+  const readsOf = (id: string) => stats.get(id)?.times ?? 0;
   const statusOf = (b: Book) => b.status ?? 'reading';
   const query = search.trim().toLowerCase();
 
@@ -102,9 +108,9 @@ export default function BookshelfScreen() {
               {shown.length === 0 ? (
                 <ThemedText themeColor="textSecondary">這裡還沒有書。</ThemedText>
               ) : view === 'shelf' ? (
-                <WoodShelf books={shown} onPress={(b) => setOpenBookId(b.id)} />
+                <WoodShelf books={shown.slice(0, limit)} onPress={(b) => setOpenBookId(b.id)} />
               ) : (
-                shown.map((book) => (
+                shown.slice(0, limit).map((book) => (
                   <Pressable key={book.id} onPress={() => setOpenBookId(book.id)}>
                     <ThemedView type="backgroundElement" style={styles.bookRow}>
                       <BookCover book={book} />
@@ -122,6 +128,9 @@ export default function BookshelfScreen() {
                   </Pressable>
                 ))
               )}
+              {shown.length > limit ? (
+                <Button title={`再顯示 ${Math.min(PAGE, shown.length - limit)} 本`} onPress={() => setLimit(limit + PAGE)} />
+              ) : null}
             </>
           )}
         </ScrollView>

@@ -28,6 +28,11 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="history">
+        <NativeTabs.Trigger.Label>紀錄</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="clock" md="history" />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="children">
         <NativeTabs.Trigger.Label>孩子</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="person.2" md="group" />

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { booksThisMonth, currentStreak, readCount, recentBooks, toDayKey } from '@/data/dates';
+import { bookStats } from '@/data/history';
 import { modeLabel, READING_MODES } from '@/data/status';
 import { useStore } from '@/data/store';
 import type { ReadingMode } from '@/data/types';
@@ -24,12 +25,20 @@ export default function CheckinScreen() {
   const canSave = books.some((b) => b.id === bookId) && note.trim().length > 0;
   const today = toDayKey(new Date());
   const query = search.trim().toLowerCase();
-  const recent = recentBooks(books, logs).filter(
+  const ordered = useMemo(() => recentBooks(books, logs), [books, logs]);
+  const matching = ordered.filter(
     (b) => !query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query)
   );
-  const readsOf = (id: string, day?: string) =>
-    readCount(logs.filter((l) => l.bookId === id && (!day || l.date === day)));
-  const titleOf = (id: string) => books.find((b) => b.id === id)?.title ?? '已移除的書';
+  // Only the most recent few, since an imported library can hold thousands of books.
+  const recent = matching.slice(0, query ? 20 : 10);
+  const noteChoices = matching.slice(0, 12);
+  const picked = books.find((b) => b.id === bookId);
+  if (picked && !noteChoices.includes(picked)) noteChoices.unshift(picked);
+  const totals = useMemo(() => bookStats(logs), [logs]);
+  const todays = useMemo(() => bookStats(logs.filter((l) => l.date === today)), [logs, today]);
+  const readsOf = (id: string, day?: string) => (day ? todays : totals).get(id)?.times ?? 0;
+  const titles = useMemo(() => new Map(books.map((b) => [b.id, b.title])), [books]);
+  const titleOf = (id: string) => titles.get(id) ?? '已移除的書';
 
   function onSave() {
     if (!bookId) return;
@@ -100,7 +109,7 @@ export default function CheckinScreen() {
               </ThemedText>
             ) : (
               <View style={styles.chips}>
-                {books.map((b) => (
+                {noteChoices.map((b) => (
                   <Button key={b.id} title={b.title} selected={b.id === bookId} onPress={() => setBookId(b.id)} />
                 ))}
               </View>

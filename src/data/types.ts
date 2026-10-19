@@ -15,17 +15,38 @@ export type Child = {
   avatar: string;
 };
 
-export type Book = {
+/** A book in the family library, shared by all children. */
+export type LibraryBook = {
   id: string;
-  childId: string;
   title: string;
   author: string;
   language: BookLanguage;
   isbn?: string;
+  /** A web address, or a cover photo stored as a JPEG data URI. */
   coverUrl?: string;
+  publisher?: string;
+  /** YYYY, YYYY-MM or YYYY-MM-DD. */
+  publishedAt?: string;
+  /** A reading level from another app, such as 小花生's 花生級別, kept as written. */
+  level?: string;
+  addedAt: string;
+  /** Set when the book came from an import, so undoing the import can remove it. */
+  importId?: string;
+};
+
+/** A book on one child's bookshelf. */
+export type ShelfEntry = {
+  /** `${childId}:${bookId}` */
+  id: string;
+  childId: string;
+  bookId: string;
   status?: BookStatus;
   addedAt: string;
+  importId?: string;
 };
+
+/** A library book as it sits on the active child's shelf. */
+export type Book = LibraryBook & { childId: string; status?: BookStatus };
 
 export type ReadingLog = {
   id: string;
@@ -39,4 +60,14 @@ export type ReadingLog = {
   note?: string;
   /** Local calendar day, YYYY-MM-DD. */
   date: string;
+  importId?: string;
+};
+
+/** One run of the importer, kept so it can be undone. */
+export type ImportRecord = {
+  id: string;
+  at: string;
+  fileNames: string[];
+  books: number;
+  logs: number;
 };

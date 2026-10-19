@@ -1,69 +1,142 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { migrateV1, type State } from './children';
+import { loadSaved, saveChanges } from './database';
+import type { Changes } from './database-types';
 import { toDayKey } from './dates';
-import type { Book, Child, ReadingLog, ReadingMode } from './types';
+import type { ImportPlan } from './importer';
+import {
+  allRows,
+  diffStates,
+  EMPTY_STATE,
+  findSameBook,
+  fromLegacy,
+  newId,
+  shelfId,
+  type LegacyState,
+  type State,
+} from './library';
+import type { Book, Child, ImportRecord, LibraryBook, ReadingLog, ReadingMode } from './types';
 
-const STORAGE_KEY = 'book-app/state/v2';
-const STORAGE_KEY_V1 = 'book-app/state/v1';
+// Where everything was kept before the database: one JSON string per version.
+const LEGACY_KEY = 'book-app/state/v2';
+const LEGACY_KEY_V1 = 'book-app/state/v1';
 
 type Store = {
   loaded: boolean;
   children: Child[];
   activeChild?: Child;
-  /** Books and logs of the active child only. */
+  /** Books on the active child's shelf, and the active child's logs. */
   books: Book[];
   logs: ReadingLog[];
+  /** The whole family's library and logs, for the history page. */
+  library: LibraryBook[];
+  allLogs: ReadingLog[];
+  imports: ImportRecord[];
+  /** The full state, for planning an import against what is already saved. */
+  state: State;
   addChild: (child: Omit<Child, 'id'>) => void;
   updateChild: (id: string, patch: Partial<Omit<Child, 'id'>>) => void;
   removeChild: (id: string) => void;
   setActiveChild: (id: string) => void;
   addBook: (book: Omit<Book, 'id' | 'addedAt' | 'childId'>) => void;
   updateBook: (id: string, patch: Partial<Omit<Book, 'id' | 'childId'>>) => void;
+  /** Takes the book off the active child's shelf, with that child's logs of it. */
   removeBook: (id: string) => void;
   addLog: (log: Omit<ReadingLog, 'id' | 'childId'>) => void;
   /** Adds (or with -1 removes) one read of a book today, done in the given way, for the active child. */
   changeReadsToday: (bookId: string, delta: 1 | -1, mode: ReadingMode) => void;
+  applyImport: (plan: ImportPlan) => void;
+  undoImport: (id: string) => void;
 };
 
 const StoreContext = createContext<Store | null>(null);
 
-function newId() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+async function loadLegacy(): Promise<State | null> {
+  const raw = (await AsyncStorage.getItem(LEGACY_KEY)) ?? (await AsyncStorage.getItem(LEGACY_KEY_V1));
+  return raw ? fromLegacy(JSON.parse(raw) as LegacyState) : null;
 }
 
-async function loadState(): Promise<State | null> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  if (raw) return JSON.parse(raw);
-  const rawV1 = await AsyncStorage.getItem(STORAGE_KEY_V1);
-  return rawV1 ? migrateV1(JSON.parse(rawV1), newId()) : null;
+/** Loads the saved state, moving it out of the old storage the first time. The old copy is left in place. */
+async function loadState(): Promise<{ state: State; firstSave?: Changes }> {
+  const { tables, meta } = await loadSaved();
+  if (meta.migrated !== '1') {
+    const legacy = await loadLegacy();
+    const state = legacy ?? EMPTY_STATE;
+    return { state, firstSave: allRows(state) };
+  }
+  return {
+    state: {
+      children: tables.children as Child[],
+      activeChildId: meta.activeChildId || undefined,
+      books: tables.books as LibraryBook[],
+      shelf: tables.shelf as State['shelf'],
+      // Newest first, like the in-memory order new logs are added in.
+      logs: (tables.logs as ReadingLog[]).sort((a, b) => b.date.localeCompare(a.date)),
+      imports: (tables.imports as ImportRecord[]).sort((a, b) => b.at.localeCompare(a.at)),
+    },
+  };
 }
 
-/** Keeps child profiles, bookshelves and reading logs on the device. Cloud sync (Supabase) comes later. */
+/** Removes books no shelf holds any more. */
+function dropUnshelved(s: State): State {
+  const used = new Set(s.shelf.map((e) => e.bookId));
+  return s.books.every((b) => used.has(b.id)) ? s : { ...s, books: s.books.filter((b) => used.has(b.id)) };
+}
+
+/** Keeps child profiles, the family library, bookshelves and reading logs in a database on the device. */
 export function StoreProvider({ children: content }: { children: ReactNode }) {
-  const [state, setState] = useState<State>({ children: [], books: [], logs: [] });
+  const [state, setState] = useState<State>(EMPTY_STATE);
   const [loaded, setLoaded] = useState(false);
+  const saved = useRef<State>(EMPTY_STATE);
+  const queue = useRef<Promise<void>>(Promise.resolve());
+
+  const enqueue = (changes: Changes) => {
+    queue.current = queue.current.then(() => saveChanges(changes)).catch((e) => console.error('Saving failed', e));
+  };
 
   useEffect(() => {
     loadState()
-      .then((s) => s && setState(s))
+      .then(({ state: s, firstSave }) => {
+        saved.current = s;
+        setState(s);
+        if (firstSave) enqueue(firstSave);
+      })
+      .catch((e) => console.error('Loading failed', e))
       .finally(() => setLoaded(true));
   }, []);
 
   useEffect(() => {
-    if (loaded) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (!loaded || state === saved.current) return;
+    const changes = diffStates(saved.current, state);
+    saved.current = state;
+    if (changes) enqueue(changes);
   }, [state, loaded]);
 
   const activeChild = state.children.find((c) => c.id === state.activeChildId);
   const activeId = activeChild?.id;
 
+  const books = useMemo(() => {
+    const byId = new Map(state.books.map((b) => [b.id, b]));
+    const shelved: Book[] = [];
+    for (const e of state.shelf) {
+      const book = e.childId === activeId ? byId.get(e.bookId) : undefined;
+      if (book) shelved.push({ ...book, childId: e.childId, status: e.status, addedAt: e.addedAt });
+    }
+    return shelved;
+  }, [state.books, state.shelf, activeId]);
+  const logs = useMemo(() => state.logs.filter((l) => l.childId === activeId), [state.logs, activeId]);
+
   const store: Store = {
     loaded,
     children: state.children,
     activeChild,
-    books: state.books.filter((b) => b.childId === activeId),
-    logs: state.logs.filter((l) => l.childId === activeId),
+    books,
+    logs,
+    library: state.books,
+    allLogs: state.logs,
+    imports: state.imports,
+    state,
     addChild: (child) =>
       setState((s) => {
         const id = newId();
@@ -74,34 +147,53 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
     removeChild: (id) =>
       setState((s) => {
         const children = s.children.filter((c) => c.id !== id);
-        return {
+        return dropUnshelved({
+          ...s,
           children,
           activeChildId: s.activeChildId === id ? children[0]?.id : s.activeChildId,
-          books: s.books.filter((b) => b.childId !== id),
+          shelf: s.shelf.filter((e) => e.childId !== id),
           logs: s.logs.filter((l) => l.childId !== id),
-        };
+        });
       }),
     setActiveChild: (id) => setState((s) => ({ ...s, activeChildId: id })),
-    addBook: (book) =>
-      setState((s) =>
-        s.activeChildId
-          ? {
-              ...s,
-              books: [
-                { ...book, id: newId(), childId: s.activeChildId, addedAt: new Date().toISOString() },
-                ...s.books,
-              ],
-            }
-          : s
-      ),
-    updateBook: (id, patch) =>
-      setState((s) => ({ ...s, books: s.books.map((b) => (b.id === id ? { ...b, ...patch } : b)) })),
+    addBook: ({ status, ...book }) =>
+      setState((s) => {
+        const childId = s.activeChildId;
+        if (!childId) return s;
+        const addedAt = new Date().toISOString();
+        // A book a sibling already has is shared rather than added twice.
+        const same = findSameBook(s.books, book);
+        const library: LibraryBook = same
+          ? { ...same, coverUrl: same.coverUrl ?? book.coverUrl, author: same.author || book.author }
+          : { ...book, id: newId(), addedAt };
+        const id = shelfId(childId, library.id);
+        if (s.shelf.some((e) => e.id === id)) return s;
+        return {
+          ...s,
+          books: same ? s.books.map((b) => (b.id === same.id ? library : b)) : [library, ...s.books],
+          shelf: [{ id, childId, bookId: library.id, status, addedAt }, ...s.shelf],
+        };
+      }),
+    updateBook: (id, { status, addedAt: _addedAt, ...patch }) =>
+      setState((s) => {
+        const childId = s.activeChildId;
+        const next = { ...s };
+        if (Object.keys(patch).length) next.books = s.books.map((b) => (b.id === id ? { ...b, ...patch } : b));
+        if (status && childId) {
+          next.shelf = s.shelf.map((e) => (e.id === shelfId(childId, id) ? { ...e, status } : e));
+        }
+        return next;
+      }),
     removeBook: (id) =>
-      setState((s) => ({
-        ...s,
-        books: s.books.filter((b) => b.id !== id),
-        logs: s.logs.filter((l) => l.bookId !== id),
-      })),
+      setState((s) => {
+        const childId = s.activeChildId;
+        if (!childId) return s;
+        return dropUnshelved({
+          ...s,
+          shelf: s.shelf.filter((e) => e.id !== shelfId(childId, id)),
+          logs: s.logs.filter((l) => !(l.bookId === id && l.childId === childId)),
+        });
+      }),
     addLog: (log) =>
       setState((s) =>
         s.activeChildId ? { ...s, logs: [{ ...log, id: newId(), childId: s.activeChildId }, ...s.logs] } : s
@@ -113,7 +205,8 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
         const date = toDayKey(new Date());
         // Quick reads of a book on a given day, done the same way, share one log without a note.
         const quickToday = s.logs.filter(
-          (l) => l.childId === childId && l.bookId === bookId && l.date === date && !l.minutes && !l.note
+          (l) =>
+            l.childId === childId && l.bookId === bookId && l.date === date && !l.minutes && !l.note && !l.importId
         );
         // Undoing falls back to any of today's quick reads, in case the mode was switched since.
         const quick = quickToday.find((l) => l.mode === mode) ?? (delta < 0 ? quickToday[0] : undefined);
@@ -129,6 +222,32 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
               ? s.logs.map((l) => (l.id === quick.id ? { ...l, times } : l))
               : s.logs.filter((l) => l.id !== quick.id),
         };
+      }),
+    applyImport: (plan) =>
+      setState((s) => {
+        const updated = new Map(plan.updatedBooks.map((b) => [b.id, b]));
+        const shelfIds = new Set(s.shelf.map((e) => e.id));
+        return {
+          ...s,
+          children: [...s.children, ...plan.children],
+          activeChildId: s.activeChildId ?? plan.children[0]?.id,
+          books: [...plan.books, ...s.books.map((b) => updated.get(b.id) ?? b)],
+          shelf: [...plan.shelf.filter((e) => !shelfIds.has(e.id)), ...s.shelf],
+          logs: [...plan.logs, ...s.logs].sort((a, b) => b.date.localeCompare(a.date)),
+          imports: [plan.record, ...s.imports],
+        };
+      }),
+    undoImport: (id) =>
+      setState((s) => {
+        const logs = s.logs.filter((l) => l.importId !== id);
+        // Imported shelf entries stay if the child has since read the book in the app.
+        const stillRead = new Set(logs.map((l) => shelfId(l.childId, l.bookId)));
+        return dropUnshelved({
+          ...s,
+          logs,
+          shelf: s.shelf.filter((e) => e.importId !== id || stillRead.has(e.id)),
+          imports: s.imports.filter((r) => r.id !== id),
+        });
       }),
   };
 

@@ -2,7 +2,7 @@
 
 給家長記錄孩子閱讀的 App，參考小花生。先做 iOS，之後用同一份程式碼出 Android。
 
-技術：Expo（React Native + TypeScript）、Expo Router。資料目前存在手機上（AsyncStorage），之後接 Supabase 做雲端同步。
+技術：Expo（React Native + TypeScript）、Expo Router。資料目前存在裝置上的資料庫（手機用 SQLite，網頁版用瀏覽器的 IndexedDB），之後接 Supabase 做雲端同步。
 
 ## 目前有的功能
 

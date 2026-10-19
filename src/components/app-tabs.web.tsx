@@ -25,6 +25,9 @@ export default function AppTabs() {
           <TabTrigger name="checkin" href="/checkin" asChild>
             <TabButton>打卡</TabButton>
           </TabTrigger>
+          <TabTrigger name="history" href="/history" asChild>
+            <TabButton>紀錄</TabButton>
+          </TabTrigger>
           <TabTrigger name="children" href="/children" asChild>
             <TabButton>孩子</TabButton>
           </TabTrigger>
