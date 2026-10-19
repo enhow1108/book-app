@@ -39,8 +39,9 @@ export function BookCover({ book, width = 48 }: { book: Pick<Book, 'title' | 'co
   }
   return (
     <View style={[styles.cover, styles.placeholder, size, { backgroundColor: colorFor(book.title) }]}>
-      <Text style={[styles.title, { fontSize: Math.max(10, width / 5) }]} numberOfLines={4}>
-        {book.title}
+      {/* Tiny covers (e.g. in the calendar) only fit the title's first character. */}
+      <Text style={[styles.title, { fontSize: width < 32 ? width * 0.55 : Math.max(10, width / 5) }]} numberOfLines={4}>
+        {width < 32 ? Array.from(book.title)[0] : book.title}
       </Text>
     </View>
   );
@@ -48,6 +49,6 @@ export function BookCover({ book, width = 48 }: { book: Pick<Book, 'title' | 'co
 
 const styles = StyleSheet.create({
   cover: { borderRadius: Spacing.one },
-  placeholder: { padding: Spacing.one, justifyContent: 'center', alignItems: 'center' },
+  placeholder: { padding: Spacing.one, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   title: { color: 'white', fontWeight: '700', textAlign: 'center' },
 });

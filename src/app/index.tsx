@@ -9,6 +9,7 @@ import { ChildSwitcher } from '@/components/child-switcher';
 import { Button, Field } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { ReadingCalendar } from '@/components/reading-calendar';
 import { WoodShelf } from '@/components/wood-shelf';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { readCount, recentBooks } from '@/data/dates';
@@ -20,6 +21,13 @@ import type { Book, BookStatus } from '@/data/types';
 /** Books drawn at a time; imported libraries can hold thousands. */
 const PAGE = 60;
 
+type ShelfView = 'shelf' | 'list' | 'calendar';
+const VIEWS: { value: ShelfView; label: string }[] = [
+  { value: 'shelf', label: '書架' },
+  { value: 'list', label: '清單' },
+  { value: 'calendar', label: '月曆' },
+];
+
 type Sort = 'recent' | 'added' | 'most';
 const SORTS: { value: Sort; label: string }[] = [
   { value: 'recent', label: '最近讀的' },
@@ -28,11 +36,11 @@ const SORTS: { value: Sort; label: string }[] = [
 ];
 
 export default function BookshelfScreen() {
-  const { activeChild, books, logs } = useStore();
+  const { activeChild, books, logs, library } = useStore();
   const [adding, setAdding] = useState(false);
   const [filter, setFilter] = useState<BookStatus | 'all'>('all');
   const [sort, setSort] = useState<Sort>('recent');
-  const [view, setView] = useState<'shelf' | 'list'>('shelf');
+  const [view, setView] = useState<ShelfView>('shelf');
   const [search, setSearch] = useState('');
   const [openBookId, setOpenBookId] = useState<string>();
   const [limit, setLimit] = useState(PAGE);
@@ -82,6 +90,15 @@ export default function BookshelfScreen() {
           ) : (
             <>
               <View style={styles.chips}>
+                {VIEWS.map((v) => (
+                  <Button key={v.value} title={v.label} selected={view === v.value} onPress={() => setView(v.value)} />
+                ))}
+              </View>
+              {view === 'calendar' ? (
+                <ReadingCalendar logs={logs} library={library} onOpenBook={setOpenBookId} />
+              ) : (
+                <>
+              <View style={styles.chips}>
                 <Button title={`全部 ${books.length}`} selected={filter === 'all'} onPress={() => setFilter('all')} />
                 {STATUSES.map((s) => (
                   <Button
@@ -98,10 +115,6 @@ export default function BookshelfScreen() {
                     <Button key={s.value} title={s.label} selected={sort === s.value} onPress={() => setSort(s.value)} />
                   ))}
                 </View>
-                <Button
-                  title={view === 'shelf' ? '清單' : '書架'}
-                  onPress={() => setView(view === 'shelf' ? 'list' : 'shelf')}
-                />
               </View>
               {books.length > 5 ? <Field placeholder="找書名或作者" value={search} onChangeText={setSearch} /> : null}
 
@@ -131,6 +144,8 @@ export default function BookshelfScreen() {
               {shown.length > limit ? (
                 <Button title={`再顯示 ${Math.min(PAGE, shown.length - limit)} 本`} onPress={() => setLimit(limit + PAGE)} />
               ) : null}
+                </>
+              )}
             </>
           )}
         </ScrollView>
