@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { loadSaved, saveChanges } from './database';
-import type { Changes } from './database-types';
+import type { Changes, Row, Table } from './database-types';
 import { toDayKey } from './dates';
 import type { ImportPlan } from './importer';
 import {
@@ -48,6 +48,13 @@ type Store = {
   changeReadsToday: (bookId: string, delta: 1 | -1, mode: ReadingMode) => void;
   applyImport: (plan: ImportPlan) => void;
   undoImport: (id: string) => void;
+  /** Settings kept by the cloud sync (meta keys starting with `sync.`), as loaded at startup. */
+  syncMeta: Record<string, string>;
+  saveSyncMeta: (meta: Record<string, string>) => void;
+  /** Calls back with each set of changes made on this device, but not with those that came from the cloud. */
+  onLocalChanges: (listener?: (changes: Changes) => void) => void;
+  /** Applies changes another device made. */
+  applyRemote: (changes: Changes) => void;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -58,14 +65,15 @@ async function loadLegacy(): Promise<State | null> {
 }
 
 /** Loads the saved state, moving it out of the old storage the first time. The old copy is left in place. */
-async function loadState(): Promise<{ state: State; firstSave?: Changes }> {
+async function loadState(): Promise<{ state: State; meta: Record<string, string>; firstSave?: Changes }> {
   const { tables, meta } = await loadSaved();
   if (meta.migrated !== '1') {
     const legacy = await loadLegacy();
     const state = legacy ?? EMPTY_STATE;
-    return { state, firstSave: allRows(state) };
+    return { state, meta, firstSave: allRows(state) };
   }
   return {
+    meta,
     state: {
       children: tables.children as Child[],
       activeChildId: meta.activeChildId || undefined,
@@ -92,12 +100,59 @@ function onShelf(s: State, childId: string, bookId: string, status?: BookStatus)
   return { ...s, shelf: [{ id, childId, bookId, status, addedAt: new Date().toISOString() }, ...s.shelf] };
 }
 
+const TABLE_KEYS = { children: 'children', books: 'books', shelf: 'shelf', logs: 'logs', imports: 'imports' } as const;
+const rowKey = (table: Table, id: string) => `${table}/${id}`;
+
+/** Writes another device's changes into the state. Records are replaced whole; new logs keep the newest-first order. */
+function withRemote(s: State, changes: Changes, applied: Map<string, Row | null>): State {
+  const next = { ...s };
+  for (const table of Object.keys(TABLE_KEYS) as Table[]) {
+    const put = changes.put[table] ?? [];
+    const remove = new Set(changes.remove[table] ?? []);
+    if (!put.length && !remove.size) continue;
+    const key = TABLE_KEYS[table];
+    const incoming = new Map(put.map((r) => [r.id, r]));
+    let rows = (s[key] as Row[]).filter((r) => !remove.has(r.id)).map((r) => incoming.get(r.id) ?? r);
+    const known = new Set(rows.map((r) => r.id));
+    const added = put.filter((r) => !known.has(r.id));
+    if (added.length) {
+      rows = table === 'children' ? [...rows, ...added] : [...added, ...rows];
+      if (table === 'logs') (rows as ReadingLog[]).sort((a, b) => b.date.localeCompare(a.date));
+      if (table === 'imports') (rows as ImportRecord[]).sort((a, b) => b.at.localeCompare(a.at));
+    }
+    (next as Record<string, unknown>)[key] = rows;
+    put.forEach((r) => applied.set(rowKey(table, r.id), r));
+    remove.forEach((id) => applied.set(rowKey(table, id), null));
+  }
+  if (!next.children.some((c) => c.id === next.activeChildId)) next.activeChildId = next.children[0]?.id;
+  return next;
+}
+
+/** The part of a set of changes that wasn't just written from the cloud. */
+function localOnly(changes: Changes, applied: Map<string, Row | null>): Changes | null {
+  if (!applied.size) return changes;
+  const out: Changes = { put: {}, remove: {} };
+  let any = false;
+  for (const table of Object.keys(TABLE_KEYS) as Table[]) {
+    const put = (changes.put[table] ?? []).filter((r) => applied.get(rowKey(table, r.id)) !== r);
+    const remove = (changes.remove[table] ?? []).filter((id) => applied.get(rowKey(table, id)) !== null);
+    if (put.length) out.put[table] = put;
+    if (remove.length) out.remove[table] = remove;
+    any ||= put.length > 0 || remove.length > 0;
+  }
+  return any ? out : null;
+}
+
 /** Keeps child profiles, the family library, bookshelves and reading logs in a database on the device. */
 export function StoreProvider({ children: content }: { children: ReactNode }) {
   const [state, setState] = useState<State>(EMPTY_STATE);
   const [loaded, setLoaded] = useState(false);
   const saved = useRef<State>(EMPTY_STATE);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const [syncMeta, setSyncMeta] = useState<Record<string, string>>({});
+  const localListener = useRef<(changes: Changes) => void>(undefined);
+  // Records just written from the cloud, by `${table}/${id}` (null when removed), so they aren't sent back.
+  const remoteApplied = useRef(new Map<string, Row | null>());
 
   const enqueue = (changes: Changes) => {
     queue.current = queue.current.then(() => saveChanges(changes)).catch((e) => console.error('Saving failed', e));
@@ -105,9 +160,10 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
 
   useEffect(() => {
     loadState()
-      .then(({ state: s, firstSave }) => {
+      .then(({ state: s, meta, firstSave }) => {
         saved.current = s;
         setState(s);
+        setSyncMeta(Object.fromEntries(Object.entries(meta).filter(([k]) => k.startsWith('sync.'))));
         if (firstSave) enqueue(firstSave);
       })
       .catch((e) => console.error('Loading failed', e))
@@ -118,7 +174,11 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
     if (!loaded || state === saved.current) return;
     const changes = diffStates(saved.current, state);
     saved.current = state;
-    if (changes) enqueue(changes);
+    if (!changes) return;
+    enqueue(changes);
+    const local = localOnly(changes, remoteApplied.current);
+    remoteApplied.current = new Map();
+    if (local) localListener.current?.(local);
   }, [state, loaded]);
 
   const activeChild = state.children.find((c) => c.id === state.activeChildId);
@@ -278,6 +338,15 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
           s.books.filter((b) => b.importId === id).map((b) => b.id),
         );
       }),
+    syncMeta,
+    saveSyncMeta: (meta) => {
+      setSyncMeta((m) => ({ ...m, ...meta }));
+      enqueue({ put: {}, remove: {}, meta });
+    },
+    onLocalChanges: (listener) => {
+      localListener.current = listener;
+    },
+    applyRemote: (changes) => setState((s) => withRemote(s, changes, remoteApplied.current)),
   };
 
   return <StoreContext.Provider value={store}>{content}</StoreContext.Provider>;

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { confirmDestructive } from '@/components/dialogs';
 import { Button, Field } from '@/components/form';
+import { SyncPanel } from '@/components/sync-panel';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -51,6 +52,7 @@ export default function ChildrenScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content}>
           <ThemedText type="subtitle">孩子</ThemedText>
+          <SyncPanel />
 
           {children.map((child) => (
             <ThemedView key={child.id} type="backgroundElement" style={styles.childRow}>

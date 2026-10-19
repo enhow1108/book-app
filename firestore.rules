@@ -1,0 +1,39 @@
+rules_version = '2';
+
+// Paste into Firebase console → Firestore Database → 規則 (Rules) → 發布 (Publish).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isMember(familyId) {
+      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/families/$(familyId)).data.members;
+    }
+
+    // One family: the parents who share the children's reading records.
+    match /families/{familyId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      allow create: if signedIn() && request.resource.data.members == [request.auth.uid];
+      allow update: if signedIn() && (
+        request.auth.uid in resource.data.members ||
+        // Joining with the invite code: only adds yourself.
+        (request.resource.data.joinCode == resource.data.code &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'joinCode']) &&
+         request.resource.data.members.toSet() == resource.data.members.toSet().union([request.auth.uid].toSet()))
+      );
+
+      // Batches of changes made on one device, read by the family's other devices.
+      match /ops/{opId} {
+        allow read: if isMember(familyId);
+        allow create: if isMember(familyId) && request.resource.data.by == request.auth.uid;
+      }
+    }
+
+    // Invite codes, so a parent can find the family to join. Readable one at a time, never listed.
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow create: if signedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/families/$(request.resource.data.familyId)).data.members;
+    }
+  }
+}
