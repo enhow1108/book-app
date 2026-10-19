@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { confirmDestructive } from '@/components/dialogs';
 import { Button, Field } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -39,17 +40,10 @@ export default function ChildrenScreen() {
   }
 
   function onRemove(child: Child) {
-    Alert.alert(`刪除「${child.name}」？`, '這位孩子的書架和打卡紀錄都會一起刪除。', [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '刪除',
-        style: 'destructive',
-        onPress: () => {
-          removeChild(child.id);
-          if (editingId === child.id) resetForm();
-        },
-      },
-    ]);
+    confirmDestructive(`刪除「${child.name}」？`, '這位孩子的書架和打卡紀錄都會一起刪除。', '刪除', () => {
+      removeChild(child.id);
+      if (editingId === child.id) resetForm();
+    });
   }
 
   return (

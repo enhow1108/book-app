@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChildSwitcher } from '@/components/child-switcher';
+import { showMessage } from '@/components/dialogs';
 import { Button, Field } from '@/components/form';
 import { IsbnScanner } from '@/components/isbn-scanner';
 import { ThemedText } from '@/components/themed-text';
@@ -28,7 +29,7 @@ export default function BookshelfScreen() {
     const found = await lookupIsbn(code);
     setLooking(false);
     if (!found) {
-      Alert.alert('查無此書', '可以手動輸入書名與作者。');
+      showMessage('查無此書', '可以手動輸入書名與作者。');
       return;
     }
     setTitle(found.title);
