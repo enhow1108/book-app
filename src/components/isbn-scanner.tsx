@@ -1,9 +1,10 @@
-import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { useCameraPermissions } from 'expo-camera';
 import { useRef } from 'react';
 import { Modal, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/form';
+import { IsbnCamera } from '@/components/isbn-camera';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -20,7 +21,7 @@ export function IsbnScanner({ onScanned, onClose }: {
   // The camera fires many events per second; only take the first book barcode.
   const done = useRef(false);
 
-  function onBarcodeScanned({ data }: BarcodeScanningResult) {
+  function onBarcode(data: string) {
     if (done.current || !/^97[89]\d{10}$/.test(data)) return;
     done.current = true;
     onScanned(data);
@@ -46,17 +47,12 @@ export function IsbnScanner({ onScanned, onClose }: {
             </View>
           ) : (
             <View style={styles.cameraBox}>
-              <CameraView
-                style={StyleSheet.absoluteFill}
-                facing="back"
-                barcodeScannerSettings={{ barcodeTypes: ['ean13'] }}
-                onBarcodeScanned={onBarcodeScanned}
-              />
+              <IsbnCamera onBarcode={onBarcode} />
               <View style={styles.frame} pointerEvents="none" />
             </View>
           )}
           <ThemedText type="small" themeColor="textSecondary">
-            對準書背上以 978 或 979 開頭的條碼。
+            對準書背上以 978 或 979 開頭的條碼，手機離書約 15–20 公分。畫面模糊時把書稍微拿遠一點。
           </ThemedText>
           <Button title="取消" onPress={onClose} />
         </SafeAreaView>
