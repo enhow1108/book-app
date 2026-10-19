@@ -40,13 +40,16 @@ export function bookFinder(books: LibraryBook[]) {
     byTitle.set(key, [...(byTitle.get(key) ?? []), b]);
   };
   books.forEach(add);
-  /** The same book: same ISBN, or, when either has no ISBN, the same title. */
+  /**
+   * The same book: same ISBN, otherwise the same title, preferring a book without an ISBN.
+   * Titles still match when the ISBNs differ, since another app may list a different edition.
+   */
   const find = (book: { title: string; isbn?: string }): LibraryBook | undefined => {
     const isbn = isbnKey(book.isbn);
     const same = isbn ? byIsbn.get(isbn) : undefined;
     if (same) return same;
-    const key = titleKey(book.title);
-    return key ? byTitle.get(key)?.find((b) => !isbn || !b.isbn) : undefined;
+    const titled = byTitle.get(titleKey(book.title)) ?? [];
+    return titled.find((b) => !b.isbn) ?? titled[0];
   };
   return { find, add };
 }

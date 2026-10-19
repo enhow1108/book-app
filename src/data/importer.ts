@@ -67,6 +67,9 @@ export type ImportPlan = {
     duplicateReads: number;
     newBooks: number;
     matchedBooks: number;
+    /** Books already in the app that gain details; of them, how many gain an ISBN. */
+    updatedBooks: number;
+    filledIsbn: number;
     newChildNames: string[];
     perChild: { name: string; reads: number }[];
     firstDate?: string;
@@ -255,6 +258,7 @@ export function planImport(files: ImportFile[], state: State): ImportPlan {
   const updated = new Map<string, LibraryBook>();
   const bookIdOf = new Map<string, string>();
   let matchedBooks = 0;
+  let filledIsbn = 0;
   const usedKeys = new Set([...merged.values()].map((r) => r.bookKey));
   const finder = bookFinder(state.books);
   const isNew = new Set<string>();
@@ -275,7 +279,10 @@ export function planImport(files: ImportFile[], state: State): ImportPlan {
       const changed = (['author', 'isbn', 'publisher', 'publishedAt', 'level'] as const).some(
         (k) => filled[k] !== existing[k]
       );
-      if (changed && !isNew.has(existing.id)) updated.set(existing.id, filled);
+      if (changed && !isNew.has(existing.id)) {
+        if (filled.isbn && !existing.isbn && !updated.has(existing.id)) filledIsbn++;
+        updated.set(existing.id, filled);
+      }
       continue;
     }
     const book: LibraryBook = {
@@ -349,6 +356,8 @@ export function planImport(files: ImportFile[], state: State): ImportPlan {
       duplicateReads: totalInFiles - reads,
       newBooks: newBooks.length,
       matchedBooks,
+      updatedBooks: updated.size,
+      filledIsbn,
       newChildNames: children.filter((c) => perChild.has(c.name)).map((c) => c.name),
       perChild: [...perChild].map(([name, n]) => ({ name, reads: n })),
       firstDate: dates.length ? dates[dates.length - 1] : undefined,

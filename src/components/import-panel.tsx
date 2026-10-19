@@ -33,7 +33,13 @@ export function ImportPanel() {
     if (!plan) return;
     applyImport(plan);
     setPlan(undefined);
-    showMessage('匯入好了', `加入 ${plan.summary.reads} 次閱讀、${plan.summary.newBooks} 本新書。`);
+    const { reads, newBooks, updatedBooks } = plan.summary;
+    showMessage(
+      '匯入好了',
+      [reads ? `加入 ${reads} 次閱讀、${newBooks} 本新書。` : '', updatedBooks ? `更新了 ${updatedBooks} 本書的資料。` : '']
+        .filter(Boolean)
+        .join('\n')
+    );
   }
 
   async function onExport() {
@@ -70,6 +76,12 @@ export function ImportPanel() {
           <ThemedText type="small">
             新書 {s.newBooks} 本 · 書架上已有 {s.matchedBooks} 本
           </ThemedText>
+          {s.updatedBooks > 0 ? (
+            <ThemedText type="small">
+              {`會補上 ${s.updatedBooks} 本書的資料`}
+              {s.filledIsbn > 0 ? `，其中 ${s.filledIsbn} 本補上 ISBN（之後會用 ISBN 找封面）` : ''}
+            </ThemedText>
+          ) : null}
           {s.newChildNames.length ? (
             <ThemedText type="small">會新增孩子：{s.newChildNames.join('、')}</ThemedText>
           ) : null}
@@ -89,7 +101,7 @@ export function ImportPanel() {
             </ThemedText>
           ) : null}
           <View style={styles.row}>
-            <Button title="確認匯入" onPress={onConfirm} disabled={s.reads === 0} />
+            <Button title="確認匯入" onPress={onConfirm} disabled={s.reads === 0 && s.updatedBooks === 0} />
             <Button title="取消" onPress={() => setPlan(undefined)} />
           </View>
         </ThemedView>

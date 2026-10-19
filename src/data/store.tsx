@@ -234,7 +234,8 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
           books: [...plan.books, ...s.books.map((b) => updated.get(b.id) ?? b)],
           shelf: [...plan.shelf.filter((e) => !shelfIds.has(e.id)), ...s.shelf],
           logs: [...plan.logs, ...s.logs].sort((a, b) => b.date.localeCompare(a.date)),
-          imports: [plan.record, ...s.imports],
+          // An import that only filled in book details has nothing to undo.
+          imports: plan.logs.length || plan.books.length ? [plan.record, ...s.imports] : s.imports,
         };
       }),
     undoImport: (id) =>
