@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { BookCover } from '@/components/book-cover';
-import { showMessage } from '@/components/dialogs';
 import { Button, Field } from '@/components/form';
 import { IsbnScanner } from '@/components/isbn-scanner';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { pickCoverPhoto } from '@/data/cover-photo';
 import { lookupIsbn } from '@/data/isbn';
 import { STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
@@ -24,13 +24,16 @@ export function AddBookForm({ onClose }: { onClose: () => void }) {
   const [coverUrl, setCoverUrl] = useState<string>();
   const [looking, setLooking] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [notFound, setNotFound] = useState(false);
 
   async function onLookup(code = isbn) {
     setLooking(true);
+    setNotFound(false);
     const found = await lookupIsbn(code);
     setLooking(false);
     if (!found) {
-      showMessage('查無此書', '可以手動輸入書名與作者。');
+      // Switch to typing it in: the ISBN stays, and the parent fills in the rest and can photograph the cover.
+      setNotFound(true);
       return;
     }
     setTitle(found.title);
@@ -52,6 +55,12 @@ export function AddBookForm({ onClose }: { onClose: () => void }) {
     setAuthor('');
     setLanguage('zh');
     setCoverUrl(undefined);
+    setNotFound(false);
+  }
+
+  async function onPhoto(from: 'camera' | 'library') {
+    const photo = await pickCoverPhoto(from);
+    if (photo) setCoverUrl(photo);
   }
 
   return (
@@ -71,11 +80,20 @@ export function AddBookForm({ onClose }: { onClose: () => void }) {
         <Button title="掃描" onPress={() => setScanning(true)} disabled={looking} />
         <Button title={looking ? '查詢中…' : '查詢'} onPress={() => onLookup()} disabled={!isbn || looking} />
       </View>
+      {notFound ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          查不到這本書，請自己輸入書名和作者，也可以拍一張封面照片。
+        </ThemedText>
+      ) : null}
       <View style={styles.row}>
-        {title ? <BookCover book={{ title, coverUrl, isbn }} width={44} /> : null}
+        <BookCover key={coverUrl ?? ''} book={{ title: title || '封面', coverUrl, isbn }} width={64} />
         <View style={[styles.grow, styles.fields]}>
           <Field placeholder="書名" value={title} onChangeText={setTitle} />
           <Field placeholder="作者" value={author} onChangeText={setAuthor} />
+          <View style={styles.row}>
+            <Button title="拍封面" onPress={() => onPhoto('camera')} />
+            <Button title="選照片" onPress={() => onPhoto('library')} />
+          </View>
         </View>
       </View>
       <View style={styles.row}>

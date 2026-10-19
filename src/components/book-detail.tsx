@@ -7,6 +7,7 @@ import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { pickCoverPhoto } from '@/data/cover-photo';
 import { readCount, toDayKey } from '@/data/dates';
 import { STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
@@ -21,6 +22,11 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
   const today = readCount(bookLogs.filter((l) => l.date === toDayKey(new Date())));
   const total = readCount(bookLogs);
   const status = book.status ?? 'reading';
+
+  async function onPhoto(from: 'camera' | 'library') {
+    const photo = await pickCoverPhoto(from);
+    if (photo) updateBook(bookId, { coverUrl: photo });
+  }
 
   function onRemove() {
     if (!book) return;
@@ -39,7 +45,11 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
               <Button title="關閉" onPress={onClose} />
             </View>
             <View style={styles.center}>
-              <BookCover book={book} width={140} />
+              <BookCover key={book.coverUrl ?? ''} book={book} width={140} />
+              <View style={styles.row}>
+                <Button title="拍封面" onPress={() => onPhoto('camera')} />
+                <Button title="換照片" onPress={() => onPhoto('library')} />
+              </View>
               <ThemedText type="subtitle" style={styles.title}>
                 {book.title}
               </ThemedText>
