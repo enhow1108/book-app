@@ -46,7 +46,7 @@ export function parseNclResults(html: string): NclBook | null {
     return m ? text(m[1]) : '';
   };
   const title = cell('書名');
-  if (!title) return null;
+  if (!title || title === '無資料') return null;
   return { title, author: cell('作者'), publisher: cell('出版者'), date: cell('日期'), audience: cell('適讀對象') };
 }
 
@@ -65,6 +65,8 @@ export async function lookupNcl(rawIsbn: string): Promise<NclBook | null> {
     FO_每頁筆數: '10',
     FO_目前頁數: '1',
     FB_ListOri: '',
+    // Required: without a sort order NCL answers with a "無資料" placeholder row.
+    FO_資料排序: 'PubMonth_Pre DESC',
   });
   const search = await fetch(`${BASE}H30_SearchBooks.php?&Pact=DisplayAll4Simple`, {
     method: 'POST',
