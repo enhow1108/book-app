@@ -1,8 +1,8 @@
-import { Image } from 'expo-image';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BookCover } from '@/components/book-cover';
 import { ChildSwitcher } from '@/components/child-switcher';
 import { showMessage } from '@/components/dialogs';
 import { Button, Field } from '@/components/form';
@@ -49,6 +49,7 @@ export default function BookshelfScreen() {
     setIsbn('');
     setTitle('');
     setAuthor('');
+    setLanguage('zh');
     setCoverUrl(undefined);
   }
 
@@ -64,7 +65,7 @@ export default function BookshelfScreen() {
             <View style={styles.row}>
               <Field
                 style={styles.grow}
-                placeholder="ISBN（書背條碼下方的數字）"
+                placeholder="ISBN 條碼數字"
                 keyboardType="number-pad"
                 value={isbn}
                 onChangeText={setIsbn}
@@ -86,11 +87,7 @@ export default function BookshelfScreen() {
           ) : (
             books.map((book) => (
               <ThemedView key={book.id} type="backgroundElement" style={styles.bookRow}>
-                {book.coverUrl ? (
-                  <Image source={book.coverUrl} style={styles.cover} contentFit="cover" />
-                ) : (
-                  <ThemedView type="backgroundSelected" style={styles.cover} />
-                )}
+                <BookCover book={book} />
                 <View style={styles.grow}>
                   <ThemedText type="smallBold">{book.title}</ThemedText>
                   <ThemedText type="small" themeColor="textSecondary">
@@ -118,7 +115,7 @@ const styles = StyleSheet.create({
   },
   card: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.two },
   row: { flexDirection: 'row', gap: Spacing.two, alignItems: 'center' },
-  grow: { flex: 1 },
+  grow: { flex: 1, minWidth: 0 },
   bookRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -126,5 +123,4 @@ const styles = StyleSheet.create({
     padding: Spacing.two,
     borderRadius: Spacing.three,
   },
-  cover: { width: 48, height: 68, borderRadius: Spacing.one },
 });

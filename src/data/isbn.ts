@@ -24,7 +24,7 @@ async function fromGoogleBooks(isbn: string): Promise<IsbnResult | null> {
       title: info.title,
       author: (info.authors ?? []).join('、'),
       language: info.language?.startsWith('zh') ? 'zh' : 'en',
-      coverUrl: info.imageLinks?.thumbnail?.replace('http://', 'https://'),
+      coverUrl: info.imageLinks?.thumbnail?.replace('http://', 'https://').replace('&edge=curl', ''),
     };
   } catch {
     return null;

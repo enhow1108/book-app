@@ -24,7 +24,9 @@ export type ReadingLog = {
   id: string;
   childId: string;
   bookId: string;
-  minutes: number;
+  /** How many times the book was read; older logs without it count as once. */
+  times?: number;
+  minutes?: number;
   note?: string;
   /** Local calendar day, YYYY-MM-DD. */
   date: string;

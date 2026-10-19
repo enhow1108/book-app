@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { migrateV1, type State } from './children';
+import { toDayKey } from './dates';
 import type { Book, Child, ReadingLog } from './types';
 
 const STORAGE_KEY = 'book-app/state/v2';
@@ -21,6 +22,8 @@ type Store = {
   addBook: (book: Omit<Book, 'id' | 'addedAt' | 'childId'>) => void;
   removeBook: (id: string) => void;
   addLog: (log: Omit<ReadingLog, 'id' | 'childId'>) => void;
+  /** Adds (or with -1 removes) one read of a book today for the active child. */
+  changeReadsToday: (bookId: string, delta: 1 | -1) => void;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -100,6 +103,28 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
       setState((s) =>
         s.activeChildId ? { ...s, logs: [{ ...log, id: newId(), childId: s.activeChildId }, ...s.logs] } : s
       ),
+    changeReadsToday: (bookId, delta) =>
+      setState((s) => {
+        const childId = s.activeChildId;
+        if (!childId) return s;
+        const date = toDayKey(new Date());
+        // Quick reads for a book on a given day share one log without minutes or a note.
+        const quick = s.logs.find(
+          (l) => l.childId === childId && l.bookId === bookId && l.date === date && !l.minutes && !l.note
+        );
+        if (!quick) {
+          if (delta < 0) return s;
+          return { ...s, logs: [{ id: newId(), childId, bookId, date, times: 1 }, ...s.logs] };
+        }
+        const times = (quick.times ?? 1) + delta;
+        return {
+          ...s,
+          logs:
+            times > 0
+              ? s.logs.map((l) => (l.id === quick.id ? { ...l, times } : l))
+              : s.logs.filter((l) => l.id !== quick.id),
+        };
+      }),
   };
 
   return <StoreContext.Provider value={store}>{content}</StoreContext.Provider>;

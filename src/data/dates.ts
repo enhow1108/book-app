@@ -24,3 +24,17 @@ export function booksThisMonth(logs: ReadingLog[], today = new Date()): number {
   const prefix = toDayKey(today).slice(0, 7);
   return new Set(logs.filter((l) => l.date.startsWith(prefix)).map((l) => l.bookId)).size;
 }
+
+export function readCount(logs: ReadingLog[]): number {
+  return logs.reduce((sum, l) => sum + (l.times ?? 1), 0);
+}
+
+/** Books ordered by when they were last read, most recent first; never-read books go last, newest added first. */
+export function recentBooks<B extends { id: string; addedAt: string }>(books: B[], logs: ReadingLog[]): B[] {
+  const lastRead = new Map<string, string>();
+  for (const l of logs) if ((lastRead.get(l.bookId) ?? '') < l.date) lastRead.set(l.bookId, l.date);
+  return [...books].sort(
+    (a, b) =>
+      (lastRead.get(b.id) ?? '').localeCompare(lastRead.get(a.id) ?? '') || b.addedAt.localeCompare(a.addedAt)
+  );
+}
