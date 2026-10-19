@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 
 import { migrateV1, type State } from './children';
 import { toDayKey } from './dates';
-import type { Book, Child, ReadingLog } from './types';
+import type { Book, Child, ReadingLog, ReadingMode } from './types';
 
 const STORAGE_KEY = 'book-app/state/v2';
 const STORAGE_KEY_V1 = 'book-app/state/v1';
@@ -23,8 +23,8 @@ type Store = {
   updateBook: (id: string, patch: Partial<Omit<Book, 'id' | 'childId'>>) => void;
   removeBook: (id: string) => void;
   addLog: (log: Omit<ReadingLog, 'id' | 'childId'>) => void;
-  /** Adds (or with -1 removes) one read of a book today for the active child. */
-  changeReadsToday: (bookId: string, delta: 1 | -1) => void;
+  /** Adds (or with -1 removes) one read of a book today, done in the given way, for the active child. */
+  changeReadsToday: (bookId: string, delta: 1 | -1, mode: ReadingMode) => void;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -106,18 +106,20 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
       setState((s) =>
         s.activeChildId ? { ...s, logs: [{ ...log, id: newId(), childId: s.activeChildId }, ...s.logs] } : s
       ),
-    changeReadsToday: (bookId, delta) =>
+    changeReadsToday: (bookId, delta, mode) =>
       setState((s) => {
         const childId = s.activeChildId;
         if (!childId) return s;
         const date = toDayKey(new Date());
-        // Quick reads for a book on a given day share one log without minutes or a note.
-        const quick = s.logs.find(
+        // Quick reads of a book on a given day, done the same way, share one log without a note.
+        const quickToday = s.logs.filter(
           (l) => l.childId === childId && l.bookId === bookId && l.date === date && !l.minutes && !l.note
         );
+        // Undoing falls back to any of today's quick reads, in case the mode was switched since.
+        const quick = quickToday.find((l) => l.mode === mode) ?? (delta < 0 ? quickToday[0] : undefined);
         if (!quick) {
           if (delta < 0) return s;
-          return { ...s, logs: [{ id: newId(), childId, bookId, date, times: 1 }, ...s.logs] };
+          return { ...s, logs: [{ id: newId(), childId, bookId, date, times: 1, mode }, ...s.logs] };
         }
         const times = (quick.times ?? 1) + delta;
         return {

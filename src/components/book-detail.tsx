@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,18 +10,23 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { pickCoverPhoto } from '@/data/cover-photo';
 import { readCount, toDayKey } from '@/data/dates';
-import { STATUSES } from '@/data/status';
+import { READING_MODES, STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
+import type { ReadingMode } from '@/data/types';
 
 /** Full-screen page for one book: its cover, reading status, read counts and removal. */
 export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () => void }) {
   const { books, logs, updateBook, removeBook, changeReadsToday } = useStore();
+  const [mode, setMode] = useState<ReadingMode>('self');
   const book = books.find((b) => b.id === bookId);
   if (!book) return null;
 
   const bookLogs = logs.filter((l) => l.bookId === book.id);
   const today = readCount(bookLogs.filter((l) => l.date === toDayKey(new Date())));
   const total = readCount(bookLogs);
+  const byMode = READING_MODES.map((m) => ({ ...m, count: readCount(bookLogs.filter((l) => l.mode === m.value)) })).filter(
+    (m) => m.count > 0
+  );
   const status = book.status ?? 'reading';
 
   async function onPhoto(from: 'camera' | 'library') {
@@ -71,9 +77,19 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
 
             <ThemedView type="backgroundElement" style={styles.card}>
               <ThemedText type="smallBold">今天讀了 {today} 次 · 一共 {total} 次</ThemedText>
+              {byMode.length ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  {byMode.map((m) => `${m.label} ${m.count} 次`).join(' · ')}
+                </ThemedText>
+              ) : null}
               <View style={styles.row}>
-                {today > 0 ? <Button title="−" onPress={() => changeReadsToday(book.id, -1)} /> : null}
-                <Button title="+1 次" onPress={() => changeReadsToday(book.id, 1)} />
+                {READING_MODES.map((m) => (
+                  <Button key={m.value} title={m.label} selected={mode === m.value} onPress={() => setMode(m.value)} />
+                ))}
+              </View>
+              <View style={styles.row}>
+                {today > 0 ? <Button title="−" onPress={() => changeReadsToday(book.id, -1, mode)} /> : null}
+                <Button title="+1 次" onPress={() => changeReadsToday(book.id, 1, mode)} />
               </View>
             </ThemedView>
 

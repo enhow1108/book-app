@@ -9,18 +9,19 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { booksThisMonth, currentStreak, readCount, recentBooks, toDayKey } from '@/data/dates';
+import { modeLabel, READING_MODES } from '@/data/status';
 import { useStore } from '@/data/store';
+import type { ReadingMode } from '@/data/types';
 
 export default function CheckinScreen() {
   const { books, logs, addLog, changeReadsToday } = useStore();
   const [bookId, setBookId] = useState<string>();
   const [search, setSearch] = useState('');
-  const [minutes, setMinutes] = useState('15');
+  const [mode, setMode] = useState<ReadingMode>('self');
   const [note, setNote] = useState('');
 
-  const minutesValue = Number.parseInt(minutes, 10);
   // The picked book may belong to another child after switching profiles.
-  const canSave = books.some((b) => b.id === bookId) && minutesValue > 0;
+  const canSave = books.some((b) => b.id === bookId) && note.trim().length > 0;
   const today = toDayKey(new Date());
   const query = search.trim().toLowerCase();
   const recent = recentBooks(books, logs).filter(
@@ -32,7 +33,7 @@ export default function CheckinScreen() {
 
   function onSave() {
     if (!bookId) return;
-    addLog({ bookId, times: 1, minutes: minutesValue, note: note.trim() || undefined, date: toDayKey(new Date()) });
+    addLog({ bookId, times: 1, mode, note: note.trim(), date: toDayKey(new Date()) });
     setNote('');
   }
 
@@ -48,6 +49,17 @@ export default function CheckinScreen() {
             <Stat label="本月讀了" value={booksThisMonth(logs)} unit="本" />
             <Stat label="累計" value={readCount(logs)} unit="次" />
           </View>
+
+          {books.length > 0 ? (
+            <ThemedView type="backgroundElement" style={styles.card}>
+              <ThemedText type="smallBold">今天怎麼讀？</ThemedText>
+              <View style={styles.chips}>
+                {READING_MODES.map((m) => (
+                  <Button key={m.value} title={m.label} selected={mode === m.value} onPress={() => setMode(m.value)} />
+                ))}
+              </View>
+            </ThemedView>
+          ) : null}
 
           {books.length > 0 ? (
             <ThemedView type="backgroundElement" style={styles.card}>
@@ -67,8 +79,8 @@ export default function CheckinScreen() {
                         {allReads ? `今天 ${todayReads} 次 · 共 ${allReads} 次` : '還沒讀過'}
                       </ThemedText>
                     </View>
-                    {todayReads > 0 ? <Button title="−" onPress={() => changeReadsToday(book.id, -1)} /> : null}
-                    <Button title="+1 次" onPress={() => changeReadsToday(book.id, 1)} />
+                    {todayReads > 0 ? <Button title="−" onPress={() => changeReadsToday(book.id, -1, mode)} /> : null}
+                    <Button title={`${modeLabel(mode)} +1`} onPress={() => changeReadsToday(book.id, 1, mode)} />
                   </View>
                 );
               })}
@@ -81,7 +93,7 @@ export default function CheckinScreen() {
           ) : null}
 
           <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold">記錄閱讀時間和心得</ThemedText>
+            <ThemedText type="smallBold">寫一句心得</ThemedText>
             {books.length === 0 ? (
               <ThemedText type="small" themeColor="textSecondary">
                 先到「書架」加一本書。
@@ -93,8 +105,7 @@ export default function CheckinScreen() {
                 ))}
               </View>
             )}
-            <Field placeholder="讀了幾分鐘" keyboardType="number-pad" value={minutes} onChangeText={setMinutes} />
-            <Field placeholder="一句心得（可不填）" value={note} onChangeText={setNote} />
+            <Field placeholder="今天讀完的心得" value={note} onChangeText={setNote} />
             <Button title="打卡" onPress={onSave} disabled={!canSave} />
           </ThemedView>
 
@@ -102,7 +113,7 @@ export default function CheckinScreen() {
             <ThemedView key={log.id} type="backgroundElement" style={styles.logRow}>
               <ThemedText type="smallBold">{titleOf(log.bookId)}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {[log.date, `${log.times ?? 1} 次`, log.minutes ? `${log.minutes} 分鐘` : '', log.note ?? '']
+                {[log.date, modeLabel(log.mode), `${log.times ?? 1} 次`, log.note ?? '']
                   .filter(Boolean)
                   .join(' · ')}
               </ThemedText>
@@ -141,6 +152,6 @@ const styles = StyleSheet.create({
   card: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.two },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   recentRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  grow: { flex: 1 },
+  grow: { flex: 1, minWidth: 0 },
   logRow: { padding: Spacing.three, borderRadius: Spacing.three },
 });
