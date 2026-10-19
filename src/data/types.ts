@@ -1,5 +1,8 @@
 export type BookLanguage = 'zh' | 'en';
 
+/** Where a book is in the child's reading; books saved before statuses existed count as reading. */
+export type BookStatus = 'want' | 'reading' | 'done';
+
 /** A child profile under the parent's account. Kept minimal on purpose: no photos, no birthdays. */
 export type Child = {
   id: string;
@@ -17,6 +20,7 @@ export type Book = {
   language: BookLanguage;
   isbn?: string;
   coverUrl?: string;
+  status?: BookStatus;
   addedAt: string;
 };
 

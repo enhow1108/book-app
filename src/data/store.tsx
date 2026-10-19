@@ -20,6 +20,7 @@ type Store = {
   removeChild: (id: string) => void;
   setActiveChild: (id: string) => void;
   addBook: (book: Omit<Book, 'id' | 'addedAt' | 'childId'>) => void;
+  updateBook: (id: string, patch: Partial<Omit<Book, 'id' | 'childId'>>) => void;
   removeBook: (id: string) => void;
   addLog: (log: Omit<ReadingLog, 'id' | 'childId'>) => void;
   /** Adds (or with -1 removes) one read of a book today for the active child. */
@@ -93,6 +94,8 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
             }
           : s
       ),
+    updateBook: (id, patch) =>
+      setState((s) => ({ ...s, books: s.books.map((b) => (b.id === id ? { ...b, ...patch } : b)) })),
     removeBook: (id) =>
       setState((s) => ({
         ...s,
