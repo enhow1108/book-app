@@ -29,6 +29,8 @@ export type LibraryBook = {
   publishedAt?: string;
   /** A reading level from another app, such as 小花生's 花生級別, kept as written. */
   level?: string;
+  /** When Google Books was last asked for a cover and had none, so it isn't asked again every time. */
+  coverCheckedAt?: string;
   addedAt: string;
   /** Set when the book came from an import, so undoing the import can remove it. */
   importId?: string;

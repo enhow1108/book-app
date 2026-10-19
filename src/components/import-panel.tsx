@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { CoverFiller } from '@/components/cover-filler';
 import { confirmDestructive, showMessage } from '@/components/dialogs';
 import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
@@ -106,6 +107,8 @@ export function ImportPanel() {
           </View>
         </ThemedView>
       ) : null}
+
+      <CoverFiller />
 
       {imports.map((r) => (
         <View key={r.id} style={styles.importRow}>
