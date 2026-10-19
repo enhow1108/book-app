@@ -10,12 +10,12 @@ import { Spacing } from '@/constants/theme';
 /** Books asked about at once; Google Books allows a few requests per second. */
 const PARALLEL = 4;
 
-/** Looks up covers on Google Books for library books that have an ISBN but no cover. */
+/** Looks up covers on Google Books for library books that have none. */
 export function CoverFiller() {
   const { library, updateBook } = useStore();
   const [progress, setProgress] = useState<{ done: number; found: number; total: number; quota?: boolean }>();
   const running = useRef(false);
-  const missing = library.filter((b) => b.isbn && !b.coverUrl && !b.coverCheckedAt);
+  const missing = library.filter((b) => !b.coverUrl && !b.coverCheckedAt);
 
   if (!GOOGLE_BOOKS_KEY || (missing.length === 0 && !progress)) return null;
 
@@ -29,7 +29,7 @@ export function CoverFiller() {
       while (queue.length && !state.quota) {
         const book = queue.shift()!;
         try {
-          const cover = await findGoogleCover(book.isbn!);
+          const cover = await findGoogleCover(book);
           if (cover === 'quota') {
             state.quota = true;
             break;
@@ -57,7 +57,7 @@ export function CoverFiller() {
         {progress
           ? `已查 ${progress.done} / ${progress.total} 本，找到 ${progress.found} 張封面。` +
             (progress.quota ? '今天 Google 的查詢次數用完了，明天再按一次會接著查。' : '')
-          : `有 ${missing.length} 本書有 ISBN 但還沒有封面，可以到 Google Books 找找看。`}
+          : `有 ${missing.length} 本書還沒有封面，可以到 Google Books 找找看（英文書比較找得到）。`}
       </ThemedText>
       {!busy ? <Button title="找封面" onPress={onStart} disabled={missing.length === 0} /> : null}
     </View>

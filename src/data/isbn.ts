@@ -1,3 +1,4 @@
+import { titleKey } from './library';
 import type { BookLanguage } from './types';
 
 export type IsbnResult = {
@@ -19,16 +20,32 @@ const googleBooksUrl = (isbn: string) =>
 const googleCover = (info: { imageLinks?: { thumbnail?: string } } | undefined) =>
   info?.imageLinks?.thumbnail?.replace('http://', 'https://').replace('&edge=curl', '');
 
+type GoogleVolume = { title?: string; imageLinks?: { thumbnail?: string } };
+
 /**
- * Finds a cover on Google Books for a book that has none. Returns null when Google has no cover,
+ * Finds a cover on Google Books for a book that has none: by ISBN first, then by exact title, since
+ * Google's ISBN search often finds nothing even for books it has. Returns null when Google has no cover,
  * and 'quota' when the daily limit is used up, so a batch can stop and try again another day.
  */
-export async function findGoogleCover(isbn: string): Promise<string | null | 'quota'> {
-  const res = await fetch(googleBooksUrl(isbn));
-  if (res.status === 429 || res.status === 403) return 'quota';
-  if (!res.ok) return null;
-  const json = await res.json();
-  return googleCover(json.items?.[0]?.volumeInfo) ?? null;
+export async function findGoogleCover(book: { isbn?: string; title: string }): Promise<string | null | 'quota'> {
+  const search = async (q: string): Promise<GoogleVolume[] | 'quota'> => {
+    const key = GOOGLE_BOOKS_KEY ? `&key=${GOOGLE_BOOKS_KEY}` : '';
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=5${key}`);
+    if (res.status === 429 || res.status === 403) return 'quota';
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json.items ?? []).map((i: { volumeInfo: GoogleVolume }) => i.volumeInfo);
+  };
+  if (book.isbn) {
+    const found = await search(`isbn:${book.isbn}`);
+    if (found === 'quota') return found;
+    const cover = found.map(googleCover).find(Boolean);
+    if (cover) return cover;
+  }
+  const found = await search(`intitle:${book.title}`);
+  if (found === 'quota') return found;
+  const same = found.find((v) => v.title && titleKey(v.title) === titleKey(book.title) && googleCover(v));
+  return same ? googleCover(same)! : null;
 }
 
 /**
