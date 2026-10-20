@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { pickCoverPhoto } from '@/data/cover-photo';
-import { lookupIsbn } from '@/data/isbn';
+import { findGoogleCover, lookupIsbn } from '@/data/isbn';
 import { STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
 import type { BookLanguage, BookStatus } from '@/data/types';
@@ -44,6 +44,11 @@ export function AddBookForm({ onClose }: { onClose: () => void }) {
     setAuthor(found.author);
     setLanguage(found.language);
     setCoverUrl(found.coverUrl);
+    // Taiwan's library gives no covers, and Google's ISBN search often misses, so try Google by title too.
+    if (!found.coverUrl) {
+      const cover = await findGoogleCover({ title: found.title }).catch(() => null);
+      if (cover && cover !== 'quota') setCoverUrl((current) => current ?? cover);
+    }
   }
 
   function onScanned(code: string) {
