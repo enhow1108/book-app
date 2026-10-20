@@ -1,0 +1,5 @@
+date,child,title,times,author,isbn,publisher,published,mode,language,level,note
+2026-10-15,小美,The Very Busy Spider,1,Eric Carle,,Philomel,1984-01,媽媽唸,en,2,
+2026-10-15,小美,"Frog and Toad, Together",2,Arnold Lobel,,Harper,1972-03,一起看,en,"2,4",
+2026-10-14,小明+小美,兒童月刊第12期,1,,,測試出版社,,一起看,zh,,兄妹一起看
+2026-10-13,小明,月亮晚安,1,瑪格麗特,9789570000001,測試出版社,2005-05,自己看,zh,,"說了""晚安""三次"

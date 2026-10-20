@@ -54,7 +54,7 @@ function changedKeys(changes: Changes): string[] {
 const encoder = new TextEncoder();
 
 /** Splits records into batches small enough for one cloud document each. */
-function batches(state: State, keys: string[]): Changes[] {
+export function batches(state: State, keys: string[]): Changes[] {
   const rows = new Map<Table, Map<string, Row>>();
   for (const t of TABLES) rows.set(t, new Map((state[STATE_KEY[t]] as Row[]).map((r) => [r.id, r])));
   const out: Changes[] = [];
@@ -78,7 +78,7 @@ function batches(state: State, keys: string[]): Changes[] {
 }
 
 /** Folds batches into one set of changes, later batches winning; leaves out records this device has unsent changes to. */
-function merge(ops: cloud.Op[], skip: Map<string, number>): Changes | null {
+export function merge(ops: cloud.Op[], skip: Map<string, number>): Changes | null {
   const latest = new Map<string, Row | null>();
   for (const op of ops) {
     for (const t of TABLES) {
