@@ -50,10 +50,10 @@ export function BackupPanel() {
     <ThemedView type="backgroundElement" style={styles.card}>
       <ThemedText type="smallBold">完整備份</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
-        把孩子、書架（含封面照片和在讀/讀完了/想讀）和所有閱讀紀錄存成一個檔案，可以放到 Google 雲端硬碟。還原只會加回 App 裡沒有的資料，不會刪掉或改掉現在的紀錄。
+        把孩子、書架（含封面照片和在讀/讀完了/想讀）和所有閱讀紀錄存成一個檔案，可以從分享選單存到 Google 雲端硬碟。還原只會加回 App 裡沒有的資料，不會刪掉或改掉現在的紀錄。
       </ThemedText>
       <View style={styles.row}>
-        <Button title="下載備份檔" onPress={onBackup} />
+        <Button title="匯出備份檔" onPress={onBackup} />
         <Button title={busy ? '讀取中…' : '從備份還原'} onPress={onPick} disabled={busy} />
       </View>
 

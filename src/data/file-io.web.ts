@@ -16,9 +16,23 @@ export async function pickFiles(kind: FileKind, multiple = true): Promise<Import
   );
 }
 
-/** Downloads a file. */
+/**
+ * Opens the share sheet where the browser can share files (phones, Safari), so the file can go straight to
+ * Google Drive or Files; elsewhere downloads it. Must be called straight from a button press.
+ */
 export async function saveFile(name: string, text: string, kind: FileKind): Promise<void> {
-  const url = URL.createObjectURL(new Blob([text], { type: MIME[kind] }));
+  const blob = new Blob([text], { type: MIME[kind] });
+  const file = new File([blob], name, { type: MIME[kind].split(';')[0] });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return;
+    } catch (e) {
+      // Closing the share sheet isn't an error; anything else falls back to downloading.
+      if (e instanceof DOMException && e.name === 'AbortError') return;
+    }
+  }
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = name;
