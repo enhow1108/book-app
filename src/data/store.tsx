@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import type { RestorePlan } from './backup';
 import { loadSaved, saveChanges } from './database';
 import type { Changes, Row, Table } from './database-types';
 import { toDayKey } from './dates';
@@ -48,6 +49,8 @@ type Store = {
   changeReadsToday: (bookId: string, delta: 1 | -1, mode: ReadingMode) => void;
   applyImport: (plan: ImportPlan) => void;
   undoImport: (id: string) => void;
+  /** Adds back what a backup file has and the app doesn't. */
+  restoreBackup: (plan: RestorePlan) => void;
   /** Settings kept by the cloud sync (meta keys starting with `sync.`), as loaded at startup. */
   syncMeta: Record<string, string>;
   saveSyncMeta: (meta: Record<string, string>) => void;
@@ -338,6 +341,7 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
           s.books.filter((b) => b.importId === id).map((b) => b.id),
         );
       }),
+    restoreBackup: (plan) => setState(plan.apply),
     syncMeta,
     saveSyncMeta: (meta) => {
       setSyncMeta((m) => ({ ...m, ...meta }));

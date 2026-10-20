@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChildSwitcher } from '@/components/child-switcher';
 import { Button, Field } from '@/components/form';
+import { BackupPanel } from '@/components/backup-panel';
 import { ImportPanel } from '@/components/import-panel';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -131,6 +132,7 @@ export default function HistoryScreen() {
           )}
 
           <ImportPanel />
+          <BackupPanel />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>

@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { toDayKey } from '@/data/dates';
-import { pickCsvFiles, saveCsv } from '@/data/file-io';
+import { pickFiles, saveFile } from '@/data/file-io';
 import { exportCsv, planImport, type ImportPlan } from '@/data/importer';
 import { useStore } from '@/data/store';
 
@@ -21,7 +21,7 @@ export function ImportPanel() {
   async function onPick() {
     try {
       setBusy(true);
-      const files = await pickCsvFiles();
+      const files = await pickFiles('csv');
       if (files.length) setPlan(planImport(files, state));
     } catch (e) {
       showMessage('讀不到檔案', String(e));
@@ -45,7 +45,7 @@ export function ImportPanel() {
 
   async function onExport() {
     try {
-      await saveCsv(`小書蟲閱讀紀錄_${toDayKey(new Date())}.csv`, exportCsv(state));
+      await saveFile(`小書蟲閱讀紀錄_${toDayKey(new Date())}.csv`, exportCsv(state), 'csv');
     } catch (e) {
       showMessage('匯出失敗', String(e));
     }
