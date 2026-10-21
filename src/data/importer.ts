@@ -1,5 +1,6 @@
 import { AVATARS } from './children';
 import { parseCsv, toCsv } from './csv';
+import { guessLanguage } from './language';
 import { bookFinder, isbnKey, newId, shelfId, titleKey, type State } from './library';
 import { modeLabel } from './status';
 import type { BookLanguage, Child, ImportRecord, LibraryBook, ReadingLog, ReadingMode, ShelfEntry } from './types';
@@ -102,12 +103,11 @@ function splitPublisher(raw: string): { publisher?: string; published?: string }
   return { publisher: m[1].trim() || undefined, published: parsePublished(m[2]) };
 }
 
-const guessLanguage = (title: string): BookLanguage => (/[㐀-鿿]/.test(title) ? 'zh' : 'en');
-
 function parseLanguage(raw: string, title: string): BookLanguage {
   const v = raw.trim().toLowerCase();
   if (['zh', '中文', 'chinese'].includes(v)) return 'zh';
   if (['en', '英文', 'english'].includes(v)) return 'en';
+  if (['ja', 'jp', '日文', '日語', '日语', '日本語', 'japanese'].includes(v)) return 'ja';
   return guessLanguage(title);
 }
 

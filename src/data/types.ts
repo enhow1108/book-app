@@ -1,4 +1,4 @@
-export type BookLanguage = 'zh' | 'en';
+export type BookLanguage = 'zh' | 'en' | 'ja';
 
 /** Where a book is in the child's reading; books saved before statuses existed count as reading. */
 export type BookStatus = 'want' | 'reading' | 'done';

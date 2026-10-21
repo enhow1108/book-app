@@ -40,7 +40,7 @@ test('add a child, a book and a read; it is all still there after a reload', asy
   await tab(page, '書架');
   await button(page, '＋ 加一本書').click();
   // A made-up ISBN: lookups are cut off, so it ends in manual entry.
-  await page.getByPlaceholder('ISBN 條碼數字').fill('9786660000000');
+  await page.getByPlaceholder('ISBN 或條碼數字').fill('9786660000000');
   await button(page, '查詢').click();
   await expect(shown(page, /查不到這本書/).first()).toBeVisible();
   await page.getByPlaceholder('書名').fill('測試的書');

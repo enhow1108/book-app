@@ -1,3 +1,5 @@
+import { isIsbn13 } from './barcode';
+import { fromLanguageCode, guessLanguage } from './language';
 import { titleKey } from './library';
 import type { BookLanguage } from './types';
 
@@ -48,14 +50,48 @@ export async function findGoogleCover(book: { isbn?: string; title: string }): P
   return same ? googleCover(same)! : null;
 }
 
+/** Japanese ISBNs: 978-4 (and 10-digit ones starting with 4). */
+const isJapanese = (isbn: string) => isbn.startsWith('9784') || (isbn.length === 10 && isbn.startsWith('4'));
+
 /**
- * Looks up a book by ISBN on Google Books, then Open Library, then Taiwan's National Central Library.
- * Returns null when none of them knows it.
+ * Looks up a book by ISBN on Google Books, then Open Library, then Taiwan's National Central Library;
+ * Japanese ISBNs go to openBD first. Returns null when none of them knows it, and right away for
+ * barcodes that are not ISBNs (such as Japanese magazine codes), which no book database lists.
  */
 export async function lookupIsbn(rawIsbn: string): Promise<IsbnResult | null> {
-  const isbn = rawIsbn.replace(/[^0-9Xx]/g, '');
-  if (!isbn) return null;
+  const isbn = rawIsbn.replace(/[^0-9Xx]/g, '').toUpperCase();
+  if (!isIsbn13(isbn) && !/^\d{9}[\dX]$/.test(isbn)) return null;
+  if (isJapanese(isbn)) {
+    const found = await fromOpenBd(isbn);
+    if (found) return found;
+  }
   return (await fromGoogleBooks(isbn)) ?? (await fromOpenLibrary(isbn)) ?? (await fromTaiwan(isbn));
+}
+
+/** "中川,李枝子 大村,百合子" or "なかがわりえこ／ぶん" into "中川李枝子、大村百合子". */
+export const cleanOpenBdAuthor = (raw: string) =>
+  raw
+    .split(/\s+/)
+    .map((name) => name.replace(/[／/].*$/, '').replace(/,/g, ''))
+    .filter(Boolean)
+    .join('、');
+
+/** openBD: a free Japanese book database with good coverage of 978-4 ISBNs, often with covers. */
+async function fromOpenBd(isbn: string): Promise<IsbnResult | null> {
+  try {
+    const res = await fetch(`https://api.openbd.jp/v1/get?isbn=${isbn}`);
+    const json = await res.json();
+    const info = json?.[0]?.summary;
+    if (!info?.title) return null;
+    return {
+      title: info.title,
+      author: cleanOpenBdAuthor(info.author ?? ''),
+      language: 'ja',
+      coverUrl: info.cover || undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function fromTaiwan(isbn: string): Promise<IsbnResult | null> {
@@ -79,7 +115,7 @@ async function fromGoogleBooks(isbn: string): Promise<IsbnResult | null> {
     return {
       title: info.title,
       author: (info.authors ?? []).join('、'),
-      language: info.language?.startsWith('zh') ? 'zh' : 'en',
+      language: fromLanguageCode(info.language, info.title),
       coverUrl: googleCover(info),
     };
   } catch {
@@ -98,7 +134,7 @@ async function fromOpenLibrary(isbn: string): Promise<IsbnResult | null> {
     return {
       title: info.title,
       author: (info.authors ?? []).map((a: { name: string }) => a.name).join('、'),
-      language: /[一-鿿]/.test(info.title) ? 'zh' : 'en',
+      language: guessLanguage(info.title),
       coverUrl: info.cover?.medium,
     };
   } catch {

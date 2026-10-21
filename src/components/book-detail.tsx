@@ -10,6 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { pickCoverPhoto } from '@/data/cover-photo';
 import { readCount, toDayKey } from '@/data/dates';
+import { languageLabel } from '@/data/language';
 import { modeLabel, READING_MODES, STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
 import type { ReadingMode } from '@/data/types';
@@ -84,7 +85,7 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
                 {book.title}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {[book.author, book.language === 'zh' ? '中文' : 'English'].filter(Boolean).join(' · ')}
+                {[book.author, languageLabel(book.language)].filter(Boolean).join(' · ')}
               </ThemedText>
               {family.length > 1
                 ? family.map((f) => (
