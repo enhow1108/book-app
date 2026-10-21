@@ -32,7 +32,7 @@ async function addChild(page: Page, name: string) {
 
 test('add a child, a book and a read; it is all still there after a reload', async ({ page }) => {
   await page.goto('');
-  await expect(shown(page, '全家的書架').first()).toBeVisible();
+  await expect(shown(page, '今日打卡').first()).toBeVisible();
   await expect(shown(page, '還沒有孩子的檔案。').first()).toBeVisible();
 
   await addChild(page, '小明');
@@ -113,8 +113,30 @@ test('a full backup restores into a fresh browser', async ({ page, browser }) =>
 });
 
 test('every tab opens, also straight from its address', async ({ page }) => {
-  for (const path of ['', 'checkin', 'history', 'children']) {
+  for (const path of ['', 'shelf', 'history', 'children']) {
     await page.goto(path);
     await expect(page.getByRole('link', { name: '孩子', exact: true })).toBeVisible();
   }
+});
+
+test('scan check-in: a new book is logged for the chosen child and joins the family shelf', async ({ page }) => {
+  await addChild(page, '小明');
+  await addChild(page, '小美');
+  await page.goto('');
+  await expect(shown(page, '掃描打卡').first()).toBeVisible();
+  // A made-up ISBN: lookups are cut off, so the title is typed in.
+  await page.getByPlaceholder('ISBN 或條碼數字').first().fill('9786660000000');
+  await button(page, '查詢').click();
+  await expect(shown(page, /查不到這本書/).first()).toBeVisible();
+  await page.getByPlaceholder('書名').first().fill('掃描的書');
+  await button(page, '🐛 小美').click();
+  await button(page, '一起看').click();
+  await button(page, '＋').click();
+  await button(page, '＋').click();
+  await button(page, '打卡').click();
+  await expect(shown(page, '已幫小美記上「掃描的書」一起看 3 次，也加進全家書架了。').first()).toBeVisible();
+  await expect(shown(page, '今天 3 次 · 共 3 次').first()).toBeVisible();
+
+  await tab(page, '書架');
+  await expect(shown(page, '掃描的書').first()).toBeVisible();
 });

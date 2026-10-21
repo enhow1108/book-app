@@ -1,194 +1,170 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AddBookForm } from '@/components/add-book-form';
 import { BookCover } from '@/components/book-cover';
-import { BookDetail } from '@/components/book-detail';
 import { ChildSwitcher } from '@/components/child-switcher';
+import { ScanCheckin } from '@/components/scan-checkin';
 import { Button, Field } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { ReadingCalendar } from '@/components/reading-calendar';
-import { WoodShelf } from '@/components/wood-shelf';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { readCount, recentBooks } from '@/data/dates';
+import { booksThisMonth, currentStreak, readCount, recentBooks, toDayKey } from '@/data/dates';
 import { bookStats } from '@/data/history';
-import { STATUSES } from '@/data/status';
+import { modeLabel, READING_MODES } from '@/data/status';
 import { useStore } from '@/data/store';
 import { useChildTint } from '@/hooks/use-child-tint';
-import type { Book, BookStatus } from '@/data/types';
+import type { ReadingMode } from '@/data/types';
 
-/** Books drawn at a time; imported libraries can hold thousands. */
-const PAGE = 60;
-
-type ShelfView = 'shelf' | 'list' | 'calendar';
-const VIEWS: { value: ShelfView; label: string }[] = [
-  { value: 'shelf', label: '書架' },
-  { value: 'list', label: '清單' },
-  { value: 'calendar', label: '月曆' },
-];
-
-type Sort = 'recent' | 'added' | 'most';
-const SORTS: { value: Sort; label: string }[] = [
-  { value: 'recent', label: '最近讀的' },
-  { value: 'added', label: '最新加入' },
-  { value: 'most', label: '讀最多次' },
-];
-
-export default function BookshelfScreen() {
+export default function CheckinScreen() {
   const tint = useChildTint();
-  const { activeChild, books, logs, library } = useStore();
-  const [adding, setAdding] = useState(false);
-  const [filter, setFilter] = useState<BookStatus | 'unread' | 'all'>('all');
-  const [sort, setSort] = useState<Sort>('recent');
-  const [view, setView] = useState<ShelfView>('shelf');
+  const { activeChild, children, books, logs, allLogs, addLog, changeReadsToday } = useStore();
+  const [bookId, setBookId] = useState<string>();
   const [search, setSearch] = useState('');
-  const [openBookId, setOpenBookId] = useState<string>();
-  const [limit, setLimit] = useState(PAGE);
+  const [mode, setMode] = useState<ReadingMode>('self');
+  const [note, setNote] = useState('');
 
-  const stats = useMemo(() => bookStats(logs), [logs]);
-  const readsOf = (id: string) => stats.get(id)?.times ?? 0;
-  // Books only a sibling has on their shelf so far count as not yet read by this child.
-  const statusOf = (b: Book) => (b.shelved ? (b.status ?? 'reading') : 'unread');
+  // The picked book may belong to another child after switching profiles.
+  const canSave = books.some((b) => b.id === bookId) && note.trim().length > 0;
+  const today = toDayKey(new Date());
   const query = search.trim().toLowerCase();
-
-  const sorted =
-    sort === 'recent'
-      ? recentBooks(books, logs)
-      : sort === 'added'
-        ? [...books].sort((a, b) => b.addedAt.localeCompare(a.addedAt))
-        : [...books].sort((a, b) => readsOf(b.id) - readsOf(a.id));
-  const shown = sorted.filter(
-    (b) =>
-      (filter === 'all' || statusOf(b) === filter) &&
-      (!query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query)),
+  // Ordered by the whole family's reading, so a book a sibling read today is right at the top to add.
+  const ordered = useMemo(() => recentBooks(books, allLogs), [books, allLogs]);
+  const matching = ordered.filter(
+    (b) => !query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query),
   );
-  const count = (status: BookStatus | 'unread') => books.filter((b) => statusOf(b) === status).length;
+  // Only the most recent few, since an imported library can hold thousands of books.
+  const recent = matching.slice(0, query ? 20 : 10);
+  const noteChoices = matching.slice(0, 12);
+  const picked = books.find((b) => b.id === bookId);
+  if (picked && !noteChoices.includes(picked)) noteChoices.unshift(picked);
+  const totals = useMemo(() => bookStats(logs), [logs]);
+  const todays = useMemo(() => bookStats(logs.filter((l) => l.date === today)), [logs, today]);
+  const readsOf = (id: string, day?: string) => (day ? todays : totals).get(id)?.times ?? 0;
+  const siblingsToday = useMemo(() => {
+    const names = new Map(children.filter((c) => c.id !== activeChild?.id).map((c) => [c.id, c.name]));
+    const byBook = new Map<string, Map<string, number>>();
+    for (const l of allLogs) {
+      const name = l.date === today ? names.get(l.childId) : undefined;
+      if (!name) continue;
+      const counts = byBook.get(l.bookId) ?? new Map<string, number>();
+      counts.set(name, (counts.get(name) ?? 0) + (l.times ?? 1));
+      byBook.set(l.bookId, counts);
+    }
+    return byBook;
+  }, [allLogs, children, activeChild?.id, today]);
+  const siblingsLine = (id: string) =>
+    [...(siblingsToday.get(id) ?? [])].map(([name, times]) => `${name}今天 ${times} 次`).join(' · ');
+  const titles = useMemo(() => new Map(books.map((b) => [b.id, b.title])), [books]);
+  const titleOf = (id: string) => titles.get(id) ?? '已移除的書';
+
+  function onSave() {
+    if (!bookId) return;
+    addLog({ bookId, times: 1, mode, note: note.trim(), date: toDayKey(new Date()) });
+    setNote('');
+  }
 
   return (
     <ThemedView style={[styles.container, tint && { backgroundColor: tint }]}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.header}>
-            <ThemedText type="subtitle">全家的書架</ThemedText>
-            {!adding && activeChild ? <Button title="＋ 加一本書" onPress={() => setAdding(true)} /> : null}
-          </View>
+          <ThemedText type="subtitle">今日打卡</ThemedText>
           <ChildSwitcher />
+          <ScanCheckin />
 
-          {adding ? <AddBookForm onClose={() => setAdding(false)} /> : null}
+          <View style={styles.stats}>
+            <Stat label="連續天數" value={currentStreak(logs)} />
+            <Stat label="本月讀了" value={booksThisMonth(logs)} unit="本" />
+            <Stat label="累計" value={readCount(logs)} unit="次" />
+          </View>
 
           {books.length > 0 ? (
-            <View style={styles.stats}>
-              <Stat value={books.length} label="本書" />
-              <Stat value={count('done')} label={activeChild ? `${activeChild.name}讀完` : '本讀完了'} />
-              <Stat value={readCount(logs)} label="次閱讀" />
-            </View>
-          ) : null}
-
-          {books.length === 0 ? (
-            <ThemedText themeColor="textSecondary">
-              {activeChild ? '書架還是空的，按「＋ 加一本書」開始吧。' : ''}
-            </ThemedText>
-          ) : (
-            <>
+            <ThemedView type="backgroundElement" style={styles.card}>
+              <ThemedText type="smallBold">今天怎麼讀？</ThemedText>
               <View style={styles.chips}>
-                {VIEWS.map((v) => (
-                  <Button key={v.value} title={v.label} selected={view === v.value} onPress={() => setView(v.value)} />
+                {READING_MODES.map((m) => (
+                  <Button key={m.value} title={m.label} selected={mode === m.value} onPress={() => setMode(m.value)} />
                 ))}
               </View>
-              {view === 'calendar' ? (
-                <ReadingCalendar logs={logs} library={library} onOpenBook={setOpenBookId} />
-              ) : (
-                <>
-                  <View style={styles.chips}>
-                    <Button
-                      title={`全部 ${books.length}`}
-                      selected={filter === 'all'}
-                      onPress={() => setFilter('all')}
-                    />
-                    {STATUSES.map((s) => (
-                      <Button
-                        key={s.value}
-                        title={`${s.label} ${count(s.value)}`}
-                        selected={filter === s.value}
-                        onPress={() => setFilter(s.value)}
-                      />
-                    ))}
-                    {count('unread') > 0 ? (
-                      <Button
-                        title={`還沒讀 ${count('unread')}`}
-                        selected={filter === 'unread'}
-                        onPress={() => setFilter('unread')}
-                      />
-                    ) : null}
-                  </View>
-                  <View style={styles.toolbar}>
-                    <View style={styles.chips}>
-                      {SORTS.map((s) => (
-                        <Button
-                          key={s.value}
-                          title={s.label}
-                          selected={sort === s.value}
-                          onPress={() => setSort(s.value)}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                  {books.length > 5 ? (
-                    <Field placeholder="找書名或作者" value={search} onChangeText={setSearch} />
-                  ) : null}
+            </ThemedView>
+          ) : null}
 
-                  {shown.length === 0 ? (
-                    <ThemedText themeColor="textSecondary">這裡還沒有書。</ThemedText>
-                  ) : view === 'shelf' ? (
-                    <WoodShelf books={shown.slice(0, limit)} onPress={(b) => setOpenBookId(b.id)} />
-                  ) : (
-                    shown.slice(0, limit).map((book) => (
-                      <Pressable key={book.id} onPress={() => setOpenBookId(book.id)}>
-                        <ThemedView type="backgroundElement" style={styles.bookRow}>
-                          <BookCover book={book} />
-                          <View style={styles.grow}>
-                            <ThemedText type="smallBold" numberOfLines={2}>
-                              {book.title}
-                            </ThemedText>
-                            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                              {[
-                                book.author,
-                                STATUSES.find((s) => s.value === statusOf(book))?.label,
-                                `${readsOf(book.id)} 次`,
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </ThemedText>
-                          </View>
-                        </ThemedView>
-                      </Pressable>
-                    ))
-                  )}
-                  {shown.length > limit ? (
-                    <Button
-                      title={`再顯示 ${Math.min(PAGE, shown.length - limit)} 本`}
-                      onPress={() => setLimit(limit + PAGE)}
-                    />
-                  ) : null}
-                </>
-              )}
-            </>
-          )}
+          {books.length > 0 ? (
+            <ThemedView type="backgroundElement" style={styles.card}>
+              <ThemedText type="smallBold">全家最近讀的書</ThemedText>
+              {books.length > 5 ? <Field placeholder="找書名或作者" value={search} onChangeText={setSearch} /> : null}
+              {recent.map((book) => {
+                const todayReads = readsOf(book.id, today);
+                const allReads = readsOf(book.id);
+                return (
+                  <View key={book.id} style={styles.recentRow}>
+                    <BookCover book={book} width={40} />
+                    <View style={styles.grow}>
+                      <ThemedText type="smallBold" numberOfLines={2}>
+                        {book.title}
+                      </ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {allReads ? `今天 ${todayReads} 次 · 共 ${allReads} 次` : '還沒讀過'}
+                      </ThemedText>
+                      {siblingsLine(book.id) ? (
+                        <ThemedText type="small" themeColor="textSecondary">
+                          {siblingsLine(book.id)}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                    {todayReads > 0 ? <Button title="−" onPress={() => changeReadsToday(book.id, -1, mode)} /> : null}
+                    <Button title={`${modeLabel(mode)} +1`} onPress={() => changeReadsToday(book.id, 1, mode)} />
+                  </View>
+                );
+              })}
+              {recent.length === 0 ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  找不到符合的書。
+                </ThemedText>
+              ) : null}
+            </ThemedView>
+          ) : null}
+
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="smallBold">寫一句心得</ThemedText>
+            {books.length === 0 ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                先到「書架」加一本書。
+              </ThemedText>
+            ) : (
+              <View style={styles.chips}>
+                {noteChoices.map((b) => (
+                  <Button key={b.id} title={b.title} selected={b.id === bookId} onPress={() => setBookId(b.id)} />
+                ))}
+              </View>
+            )}
+            <Field placeholder="今天讀完的心得" value={note} onChangeText={setNote} />
+            <Button title="打卡" onPress={onSave} disabled={!canSave} />
+          </ThemedView>
+
+          {logs.slice(0, 20).map((log) => (
+            <ThemedView key={log.id} type="backgroundElement" style={styles.logRow}>
+              <ThemedText type="smallBold">{titleOf(log.bookId)}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {[log.date, modeLabel(log.mode), `${log.times ?? 1} 次`, log.note ?? ''].filter(Boolean).join(' · ')}
+              </ThemedText>
+            </ThemedView>
+          ))}
         </ScrollView>
       </SafeAreaView>
-      {openBookId ? <BookDetail bookId={openBookId} onClose={() => setOpenBookId(undefined)} /> : null}
     </ThemedView>
   );
 }
 
-function Stat({ value, label }: { value: number; label: string }) {
+function Stat({ label, value, unit = '天' }: { label: string; value: number; unit?: string }) {
   return (
     <ThemedView type="backgroundElement" style={styles.stat}>
-      <ThemedText type="subtitle">{value}</ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         {label}
+      </ThemedText>
+      <ThemedText type="subtitle">{value}</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {unit}
       </ThemedText>
     </ThemedView>
   );
@@ -202,17 +178,11 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingBottom: BottomTabInset + Spacing.four,
   },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.two },
   stats: { flexDirection: 'row', gap: Spacing.two },
-  stat: { flex: 1, alignItems: 'center', padding: Spacing.two, borderRadius: Spacing.three },
+  stat: { flex: 1, alignItems: 'center', padding: Spacing.three, borderRadius: Spacing.three },
+  card: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.two },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: Spacing.two },
+  recentRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   grow: { flex: 1, minWidth: 0 },
-  bookRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    padding: Spacing.two,
-    borderRadius: Spacing.three,
-  },
+  logRow: { padding: Spacing.three, borderRadius: Spacing.three },
 });

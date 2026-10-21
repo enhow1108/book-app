@@ -47,6 +47,11 @@ type Store = {
   addLog: (log: Omit<ReadingLog, 'id' | 'childId'>) => void;
   /** Adds (or with -1 removes) one read of a book today, done in the given way, for the active child. */
   changeReadsToday: (bookId: string, delta: 1 | -1, mode: ReadingMode) => void;
+  /**
+   * Logs some reads of a book today for one child, done the given way, and makes that child the active one.
+   * A book the family doesn't have yet is added to the family shelf first.
+   */
+  checkIn: (input: { book: NewBook; childId: string; mode: ReadingMode; times: number }) => void;
   applyImport: (plan: ImportPlan) => void;
   undoImport: (id: string) => void;
   /** Adds back what a backup file has and the app doesn't. */
@@ -94,6 +99,36 @@ function dropUnshelved(s: State, bookIds: Iterable<string>): State {
   const used = new Set(s.shelf.map((e) => e.bookId));
   const drop = new Set([...bookIds].filter((id) => !used.has(id)));
   return drop.size ? { ...s, books: s.books.filter((b) => !drop.has(b.id)) } : s;
+}
+
+/** A book as found by an ISBN lookup or typed in, before it has a place in the family library. */
+export type NewBook = Omit<LibraryBook, 'id' | 'addedAt'>;
+
+/** Adds (or with a negative count removes) quick reads of a book today for a child, done the given way. */
+function addReadsToday(s: State, childId: string, bookId: string, mode: ReadingMode, delta: number): State {
+  const date = toDayKey(new Date());
+  // Quick reads of a book on a given day, done the same way, share one log without a note.
+  const quickToday = s.logs.filter(
+    (l) => l.childId === childId && l.bookId === bookId && l.date === date && !l.minutes && !l.note && !l.importId,
+  );
+  // Undoing falls back to any of today's quick reads, in case the mode was switched since.
+  const quick = quickToday.find((l) => l.mode === mode) ?? (delta < 0 ? quickToday[0] : undefined);
+  if (!quick) {
+    if (delta < 0) return s;
+    return onShelf(
+      { ...s, logs: [{ id: newId(), childId, bookId, date, times: delta, mode }, ...s.logs] },
+      childId,
+      bookId,
+    );
+  }
+  const times = (quick.times ?? 1) + delta;
+  return {
+    ...s,
+    logs:
+      times > 0
+        ? s.logs.map((l) => (l.id === quick.id ? { ...l, times } : l))
+        : s.logs.filter((l) => l.id !== quick.id),
+  };
 }
 
 /** Puts a family book on a child's own shelf, e.g. the first time they read it. */
@@ -283,33 +318,23 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
           : s,
       ),
     changeReadsToday: (bookId, delta, mode) =>
+      setState((s) => (s.activeChildId ? addReadsToday(s, s.activeChildId, bookId, mode, delta) : s)),
+    checkIn: ({ book, childId, mode, times }) =>
       setState((s) => {
-        const childId = s.activeChildId;
-        if (!childId) return s;
-        const date = toDayKey(new Date());
-        // Quick reads of a book on a given day, done the same way, share one log without a note.
-        const quickToday = s.logs.filter(
-          (l) =>
-            l.childId === childId && l.bookId === bookId && l.date === date && !l.minutes && !l.note && !l.importId,
-        );
-        // Undoing falls back to any of today's quick reads, in case the mode was switched since.
-        const quick = quickToday.find((l) => l.mode === mode) ?? (delta < 0 ? quickToday[0] : undefined);
-        if (!quick) {
-          if (delta < 0) return s;
-          return onShelf(
-            { ...s, logs: [{ id: newId(), childId, bookId, date, times: 1, mode }, ...s.logs] },
-            childId,
-            bookId,
-          );
-        }
-        const times = (quick.times ?? 1) + delta;
-        return {
-          ...s,
-          logs:
-            times > 0
-              ? s.logs.map((l) => (l.id === quick.id ? { ...l, times } : l))
-              : s.logs.filter((l) => l.id !== quick.id),
-        };
+        if (times < 1 || !s.children.some((c) => c.id === childId)) return s;
+        // The same book the family already has (by ISBN, else title) is read again rather than added twice.
+        const same = findSameBook(s.books, book);
+        const library: LibraryBook = same
+          ? { ...same, coverUrl: same.coverUrl ?? book.coverUrl, author: same.author || book.author }
+          : { ...book, id: newId(), addedAt: new Date().toISOString() };
+        const changed = !same || library.coverUrl !== same.coverUrl || library.author !== same.author;
+        // Only a changed book is replaced, so sync doesn't upload it again for nothing.
+        const books = !changed
+          ? s.books
+          : same
+            ? s.books.map((b) => (b.id === same.id ? library : b))
+            : [library, ...s.books];
+        return addReadsToday({ ...s, books, activeChildId: childId }, childId, library.id, mode, times);
       }),
     applyImport: (plan) =>
       setState((s) => {

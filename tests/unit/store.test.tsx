@@ -65,7 +65,9 @@ test('a child added to an empty app becomes the active child and is saved', asyn
 
 test('a book a sibling already has is shared, not added twice', async () => {
   const { result } = await openStore(twoKids);
-  await act(() => result.current.addBook({ title: 'Moon', author: '', language: 'en', isbn: '111', status: 'reading' }));
+  await act(() =>
+    result.current.addBook({ title: 'Moon', author: '', language: 'en', isbn: '111', status: 'reading' }),
+  );
   await act(() => result.current.setActiveChild('k2'));
   expect(result.current.books[0]).toMatchObject({ title: 'Moon', shelved: false });
   await act(() => result.current.addBook({ title: 'moon!', author: 'X', language: 'en', isbn: '111', status: 'want' }));
@@ -94,6 +96,23 @@ test('+1 / −1 reads today share one log per reading mode', async () => {
   expect(reads(result.current.logs)).toBe(0);
   await act(() => result.current.changeReadsToday('a', -1, 'mom'));
   expect(result.current.logs).toEqual([]);
+});
+
+test('a scanned book is checked in for the chosen child, joining the family shelf only once', async () => {
+  const { result } = await openStore(twoKids);
+  const scanned = { title: 'Moon', author: '', language: 'en' as const, isbn: '111' };
+  await act(() => result.current.checkIn({ book: scanned, childId: 'k2', mode: 'mom', times: 3 }));
+  expect(result.current.activeChild?.id).toBe('k2');
+  expect(result.current.library).toHaveLength(1);
+  expect(result.current.logs).toMatchObject([{ childId: 'k2', mode: 'mom', times: 3, date: toDayKey(new Date()) }]);
+  expect(result.current.books[0].shelved).toBe(true);
+
+  // The same book scanned again for the other child is read again, not added twice.
+  await act(() => result.current.checkIn({ book: scanned, childId: 'k1', mode: 'self', times: 1 }));
+  await act(() => result.current.checkIn({ book: scanned, childId: 'k1', mode: 'self', times: 2 }));
+  expect(result.current.library).toHaveLength(1);
+  expect(result.current.logs).toMatchObject([{ childId: 'k1', mode: 'self', times: 3 }]);
+  expect(reads(result.current.allLogs)).toBe(6);
 });
 
 test('removing a book takes it off one shelf; the family keeps it while a sibling has it', async () => {
