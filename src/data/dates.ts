@@ -29,12 +29,17 @@ export function readCount(logs: ReadingLog[]): number {
   return logs.reduce((sum, l) => sum + (l.times ?? 1), 0);
 }
 
+/**
+ * Orders ISO dates and day keys newest first. Plain comparison, since localeCompare is many times slower
+ * and these sorts run over thousands of books and logs.
+ */
+export const newestFirst = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
+
 /** Books ordered by when they were last read, most recent first; never-read books go last, newest added first. */
 export function recentBooks<B extends { id: string; addedAt: string }>(books: B[], logs: ReadingLog[]): B[] {
   const lastRead = new Map<string, string>();
   for (const l of logs) if ((lastRead.get(l.bookId) ?? '') < l.date) lastRead.set(l.bookId, l.date);
-  return [...books].sort(
-    (a, b) =>
-      (lastRead.get(b.id) ?? '').localeCompare(lastRead.get(a.id) ?? '') || b.addedAt.localeCompare(a.addedAt)
-  );
+  // One sort key per book, worked out once rather than in each of the tens of thousands of comparisons.
+  const keyed = books.map((book) => ({ book, key: `${lastRead.get(book.id) ?? ''}\u0000${book.addedAt}` }));
+  return keyed.sort((a, b) => newestFirst(a.key, b.key)).map((k) => k.book);
 }

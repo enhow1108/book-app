@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import type { RestorePlan } from './backup';
 import { loadSaved, saveChanges } from './database';
 import type { Changes, Row, Table } from './database-types';
-import { toDayKey } from './dates';
+import { newestFirst, toDayKey } from './dates';
 import type { ImportPlan } from './importer';
 import {
   allRows,
@@ -56,7 +56,10 @@ type Store = {
   undoImport: (id: string) => void;
   /** Adds back what a backup file has and the app doesn't. */
   restoreBackup: (plan: RestorePlan) => void;
-  /** Settings kept by the cloud sync (meta keys starting with `sync.`), as loaded at startup. */
+  /**
+   * Settings kept by the cloud sync (meta keys starting with `sync.`): loaded at startup, then kept up to date
+   * in place. Saving them doesn't redraw the app, since the sync saves them after nearly every change.
+   */
   syncMeta: Record<string, string>;
   saveSyncMeta: (meta: Record<string, string>) => void;
   /** Calls back with each set of changes made on this device, but not with those that came from the cloud. */
@@ -88,8 +91,8 @@ async function loadState(): Promise<{ state: State; meta: Record<string, string>
       books: tables.books as LibraryBook[],
       shelf: tables.shelf as State['shelf'],
       // Newest first, like the in-memory order new logs are added in.
-      logs: (tables.logs as ReadingLog[]).sort((a, b) => b.date.localeCompare(a.date)),
-      imports: (tables.imports as ImportRecord[]).sort((a, b) => b.at.localeCompare(a.at)),
+      logs: (tables.logs as ReadingLog[]).sort((a, b) => newestFirst(a.date, b.date)),
+      imports: (tables.imports as ImportRecord[]).sort((a, b) => newestFirst(a.at, b.at)),
     },
   };
 }
@@ -155,8 +158,8 @@ function withRemote(s: State, changes: Changes, applied: Map<string, Row | null>
     const added = put.filter((r) => !known.has(r.id));
     if (added.length) {
       rows = table === 'children' ? [...rows, ...added] : [...added, ...rows];
-      if (table === 'logs') (rows as ReadingLog[]).sort((a, b) => b.date.localeCompare(a.date));
-      if (table === 'imports') (rows as ImportRecord[]).sort((a, b) => b.at.localeCompare(a.at));
+      if (table === 'logs') (rows as ReadingLog[]).sort((a, b) => newestFirst(a.date, b.date));
+      if (table === 'imports') (rows as ImportRecord[]).sort((a, b) => newestFirst(a.at, b.at));
     }
     (next as Record<string, unknown>)[key] = rows;
     put.forEach((r) => applied.set(rowKey(table, r.id), r));
@@ -187,7 +190,7 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const saved = useRef<State>(EMPTY_STATE);
   const queue = useRef<Promise<void>>(Promise.resolve());
-  const [syncMeta, setSyncMeta] = useState<Record<string, string>>({});
+  const syncMeta = useRef<Record<string, string>>({});
   const localListener = useRef<(changes: Changes) => void>(undefined);
   // Records just written from the cloud, by `${table}/${id}` (null when removed), so they aren't sent back.
   const remoteApplied = useRef(new Map<string, Row | null>());
@@ -201,7 +204,7 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
       .then(({ state: s, meta, firstSave }) => {
         saved.current = s;
         setState(s);
-        setSyncMeta(Object.fromEntries(Object.entries(meta).filter(([k]) => k.startsWith('sync.'))));
+        Object.assign(syncMeta.current, Object.fromEntries(Object.entries(meta).filter(([k]) => k.startsWith('sync.'))));
         if (firstSave) enqueue(firstSave);
       })
       .catch((e) => console.error('Loading failed', e))
@@ -235,7 +238,9 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
   }, [state.books, state.shelf, activeId]);
   const logs = useMemo(() => state.logs.filter((l) => l.childId === activeId), [state.logs, activeId]);
 
-  const store: Store = {
+  // Every screen reads the store, and the tabs stay mounted, so a new store object redraws the whole app:
+  // make one only when the data changes.
+  const store = useMemo<Store>(() => ({
     loaded,
     children: state.children,
     activeChild,
@@ -346,7 +351,7 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
           activeChildId: s.activeChildId ?? plan.children[0]?.id,
           books: [...plan.books, ...s.books.map((b) => updated.get(b.id) ?? b)],
           shelf: [...plan.shelf.filter((e) => !shelfIds.has(e.id)), ...s.shelf],
-          logs: [...plan.logs, ...s.logs].sort((a, b) => b.date.localeCompare(a.date)),
+          logs: [...plan.logs, ...s.logs].sort((a, b) => newestFirst(a.date, b.date)),
           // An import that only filled in book details has nothing to undo.
           imports: plan.logs.length || plan.books.length ? [plan.record, ...s.imports] : s.imports,
         };
@@ -367,16 +372,17 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
         );
       }),
     restoreBackup: (plan) => setState(plan.apply),
-    syncMeta,
+    syncMeta: syncMeta.current,
     saveSyncMeta: (meta) => {
-      setSyncMeta((m) => ({ ...m, ...meta }));
+      Object.assign(syncMeta.current, meta);
       enqueue({ put: {}, remove: {}, meta });
     },
     onLocalChanges: (listener) => {
       localListener.current = listener;
     },
     applyRemote: (changes) => setState((s) => withRemote(s, changes, remoteApplied.current)),
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [state, loaded, activeChild, books, logs]);
 
   return <StoreContext.Provider value={store}>{content}</StoreContext.Provider>;
 }

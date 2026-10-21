@@ -1,3 +1,4 @@
+import { newestFirst } from './dates';
 import type { LibraryBook, ReadingLog } from './types';
 
 export type Period = 'day' | 'week' | 'month' | 'year';
@@ -75,7 +76,7 @@ export function groupHistory(logs: ReadingLog[], library: LibraryBook[], period:
     g.times.set(l.bookId, (g.times.get(l.bookId) ?? 0) + times);
   }
   return [...groups]
-    .sort((a, b) => b[1].first.localeCompare(a[1].first))
+    .sort((a, b) => newestFirst(a[1].first, b[1].first))
     .map(([key, g]) => {
       const books = [...g.times]
         .flatMap(([id, times]) => {

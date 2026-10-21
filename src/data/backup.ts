@@ -1,3 +1,4 @@
+import { newestFirst } from './dates';
 import type { State } from './library';
 
 /** Marks a file as this app's full backup, so a random JSON file isn't taken for one. */
@@ -74,8 +75,8 @@ export function planRestore(text: string, state: State): RestorePlan {
         activeChildId: s.activeChildId ?? children[0]?.id,
         books: [...missing(s.books, add.books), ...s.books],
         shelf: [...missing(s.shelf, add.shelf), ...s.shelf],
-        logs: [...missing(s.logs, add.logs), ...s.logs].sort((a, b) => b.date.localeCompare(a.date)),
-        imports: [...missing(s.imports, add.imports), ...s.imports].sort((a, b) => b.at.localeCompare(a.at)),
+        logs: [...missing(s.logs, add.logs), ...s.logs].sort((a, b) => newestFirst(a.date, b.date)),
+        imports: [...missing(s.imports, add.imports), ...s.imports].sort((a, b) => newestFirst(a.at, b.at)),
       };
     },
   };

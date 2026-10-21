@@ -199,4 +199,15 @@ describe('what cloud sync sees', () => {
     expect(mockDb.tables.books.has('r')).toBe(true);
     expect(mockDb.tables.children.has('k1')).toBe(false);
   });
+
+  test('saving sync settings is kept but redraws nothing', async () => {
+    const { result } = await openStore(twoKids);
+    const before = result.current;
+    await act(() => result.current.saveSyncMeta({ 'sync.outbox': '[]', 'sync.lastSeen': 'x' }));
+    // The same store object: screens reading it don't redraw after every sync bookkeeping write.
+    expect(result.current).toBe(before);
+    expect(result.current.syncMeta['sync.lastSeen']).toBe('x');
+    await flush();
+    expect(mockDb.meta['sync.lastSeen']).toBe('x');
+  });
 });

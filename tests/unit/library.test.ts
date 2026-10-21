@@ -50,6 +50,26 @@ describe('diffStates (what gets saved and synced)', () => {
     expect(changes.put.shelf).toBeUndefined();
   });
 
+  test('a new log among thousands is the only write, wherever it lands', () => {
+    const logs = Array.from({ length: 5000 }, (_, i) => log('k1', 'a', `2026-01-${String((i % 28) + 1).padStart(2, '0')}`, { id: `l${i}` }));
+    const many = { ...before, logs };
+    const added = log('k1', 'a', '2026-02-01', { id: 'new' });
+    expect(diffStates(many, { ...many, logs: [added, ...logs] })).toEqual({ put: { logs: [added] }, remove: {} });
+    expect(diffStates(many, { ...many, logs: [...logs, added] })).toEqual({ put: { logs: [added] }, remove: {} });
+    const middle = [...logs.slice(0, 2500), added, ...logs.slice(2500)];
+    expect(diffStates(many, { ...many, logs: middle })).toEqual({ put: { logs: [added] }, remove: {} });
+  });
+
+  test('a log changed or removed in the middle of a long list is found', () => {
+    const logs = Array.from({ length: 1000 }, (_, i) => log('k1', 'a', '2026-01-01', { id: `l${i}` }));
+    const many = { ...before, logs };
+    const changed = { ...logs[400], times: 3 };
+    const after = { ...many, logs: logs.map((l) => (l === logs[400] ? changed : l)).filter((l) => l.id !== 'l600') };
+    expect(diffStates(many, after)).toEqual({ put: { logs: [changed] }, remove: { logs: ['l600'] } });
+    // Re-sorted lists still diff correctly, just without the shortcut.
+    expect(diffStates(many, { ...many, logs: [...logs].reverse() })).toBeNull();
+  });
+
   test('switching child is saved as meta', () => {
     const after = { ...before, children: [...before.children, child('k2')], activeChildId: 'k2' };
     expect(diffStates(before, after)?.meta).toEqual({ activeChildId: 'k2' });

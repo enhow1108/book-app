@@ -66,6 +66,25 @@ const KEY_OF: Record<Table, keyof State> = {
 };
 
 /**
+ * What changed between two lists of records. A tap usually adds or replaces one reading log among thousands,
+ * so the stretches at the start and end that are still the very same objects are skipped first;
+ * only the part between them is indexed.
+ */
+function diffRows(a: Row[], b: Row[]): { put: Row[]; remove: string[] } {
+  let start = 0;
+  const shorter = Math.min(a.length, b.length);
+  while (start < shorter && a[start] === b[start]) start++;
+  let end = 0;
+  while (end < shorter - start && a[a.length - 1 - end] === b[b.length - 1 - end]) end++;
+  const oldRows = a.slice(start, a.length - end);
+  const newRows = b.slice(start, b.length - end);
+  const old = new Map(oldRows.map((r) => [r.id, r]));
+  const put = newRows.filter((r) => old.get(r.id) !== r);
+  const keep = new Set(newRows.map((r) => r.id));
+  return { put, remove: oldRows.filter((r) => !keep.has(r.id)).map((r) => r.id) };
+}
+
+/**
  * What changed between two states. Updates replace records rather than mutating them,
  * so a record whose object is unchanged needs no write.
  */
@@ -76,10 +95,7 @@ export function diffStates(before: State, after: State): Changes | null {
     const a = before[KEY_OF[table]] as Row[];
     const b = after[KEY_OF[table]] as Row[];
     if (a === b) continue;
-    const old = new Map(a.map((r) => [r.id, r]));
-    const put = b.filter((r) => old.get(r.id) !== r);
-    const keep = new Set(b.map((r) => r.id));
-    const remove = a.filter((r) => !keep.has(r.id)).map((r) => r.id);
+    const { put, remove } = diffRows(a, b);
     if (put.length) changes.put[table] = put;
     if (remove.length) changes.remove[table] = remove;
     any ||= put.length > 0 || remove.length > 0;

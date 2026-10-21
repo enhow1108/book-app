@@ -9,7 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { pickCoverPhoto } from '@/data/cover-photo';
-import { readCount, toDayKey } from '@/data/dates';
+import { newestFirst, readCount, toDayKey } from '@/data/dates';
 import { languageLabel } from '@/data/language';
 import { modeLabel, READING_MODES, STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
@@ -42,7 +42,7 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
   })).filter((m) => m.count > 0);
   const status = book.shelved ? (book.status ?? 'reading') : undefined;
   // The shelf is shared, so show how every child has got on with this book.
-  const familyLogs = allLogs.filter((l) => l.bookId === book.id).sort((a, b) => b.date.localeCompare(a.date));
+  const familyLogs = allLogs.filter((l) => l.bookId === book.id).sort((a, b) => newestFirst(a.date, b.date));
   const nameOf = new Map(children.map((c) => [c.id, c.name]));
   const family = children.map((c) => {
     const own = familyLogs.filter((l) => l.childId === c.id);

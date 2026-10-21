@@ -1,4 +1,5 @@
 import {
+  defaultTabsSlotRender,
   Tabs,
   TabList,
   TabTrigger,
@@ -6,6 +7,7 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
+import { Freeze } from 'react-freeze';
 import { Pressable, View, StyleSheet, type PressableProps } from 'react-native';
 
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -16,7 +18,7 @@ import { ThemedView } from './themed-view';
 export default function AppTabs() {
   return (
     <Tabs>
-      <TabSlot style={{ height: '100%' }} />
+      <TabSlot style={{ height: '100%' }} renderFn={frozenWhenHidden} />
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="checkin" href="/" asChild>
@@ -36,6 +38,14 @@ export default function AppTabs() {
     </Tabs>
   );
 }
+
+// Tabs already visited stay mounted. Without this every hidden tab redraws on each tap, re-sorting the
+// family's thousands of books and logs; frozen, a tab catches up only when it's shown again.
+const frozenWhenHidden: typeof defaultTabsSlotRender = (descriptor, options) =>
+  defaultTabsSlotRender(
+    { ...descriptor, render: () => <Freeze freeze={!options.isFocused}>{descriptor.render()}</Freeze> },
+    options,
+  );
 
 export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
   return (

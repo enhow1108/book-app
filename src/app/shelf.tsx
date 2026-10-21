@@ -12,7 +12,7 @@ import { ThemedView } from '@/components/themed-view';
 import { ReadingCalendar } from '@/components/reading-calendar';
 import { WoodShelf } from '@/components/wood-shelf';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { readCount, recentBooks } from '@/data/dates';
+import { newestFirst, readCount, recentBooks } from '@/data/dates';
 import { bookStats } from '@/data/history';
 import { STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
@@ -21,6 +21,9 @@ import type { Book, BookStatus } from '@/data/types';
 
 /** Books drawn at a time; imported libraries can hold thousands. */
 const PAGE = 60;
+
+// Books only a sibling has on their shelf so far count as not yet read by this child.
+const statusOf = (b: Book): BookStatus | 'unread' => (b.shelved ? (b.status ?? 'reading') : 'unread');
 
 type ShelfView = 'shelf' | 'list' | 'calendar';
 const VIEWS: { value: ShelfView; label: string }[] = [
@@ -49,22 +52,33 @@ export default function BookshelfScreen() {
 
   const stats = useMemo(() => bookStats(logs), [logs]);
   const readsOf = (id: string) => stats.get(id)?.times ?? 0;
-  // Books only a sibling has on their shelf so far count as not yet read by this child.
-  const statusOf = (b: Book) => (b.shelved ? (b.status ?? 'reading') : 'unread');
   const query = search.trim().toLowerCase();
 
-  const sorted =
-    sort === 'recent'
-      ? recentBooks(books, logs)
-      : sort === 'added'
-        ? [...books].sort((a, b) => b.addedAt.localeCompare(a.addedAt))
-        : [...books].sort((a, b) => readsOf(b.id) - readsOf(a.id));
-  const shown = sorted.filter(
-    (b) =>
-      (filter === 'all' || statusOf(b) === filter) &&
-      (!query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query)),
+  // Sorting and counting thousands of books is kept out of renders that don't change them.
+  const sorted = useMemo(
+    () =>
+      sort === 'recent'
+        ? recentBooks(books, logs)
+        : sort === 'added'
+          ? [...books].sort((a, b) => newestFirst(a.addedAt, b.addedAt))
+          : [...books].sort((a, b) => (stats.get(b.id)?.times ?? 0) - (stats.get(a.id)?.times ?? 0)),
+    [sort, books, logs, stats],
   );
-  const count = (status: BookStatus | 'unread') => books.filter((b) => statusOf(b) === status).length;
+  const shown = useMemo(
+    () =>
+      sorted.filter(
+        (b) =>
+          (filter === 'all' || statusOf(b) === filter) &&
+          (!query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query)),
+      ),
+    [sorted, filter, query],
+  );
+  const counts = useMemo(() => {
+    const n = { want: 0, reading: 0, done: 0, unread: 0 };
+    for (const b of books) n[statusOf(b)]++;
+    return n;
+  }, [books]);
+  const count = (status: BookStatus | 'unread') => counts[status];
 
   return (
     <ThemedView style={[styles.container, tint && { backgroundColor: tint }]}>

@@ -1,5 +1,6 @@
 import { AVATARS } from './children';
 import { parseCsv, toCsv } from './csv';
+import { newestFirst } from './dates';
 import { guessLanguage } from './language';
 import { bookFinder, isbnKey, newId, shelfId, titleKey, type State } from './library';
 import { modeLabel } from './status';
@@ -338,7 +339,7 @@ export function planImport(files: ImportFile[], state: State): ImportPlan {
       shelf.set(sid, { id: sid, childId, bookId, status: 'done', addedAt: at, importId });
     }
   }
-  logs.sort((a, b) => b.date.localeCompare(a.date));
+  logs.sort((a, b) => newestFirst(a.date, b.date));
 
   const dates = logs.map((l) => l.date);
   const loggedBooks = new Set(logs.map((l) => l.bookId));
