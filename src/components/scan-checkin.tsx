@@ -7,7 +7,9 @@ import { IsbnScanner } from '@/components/isbn-scanner';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { isBookBarcode, isIsbn13, isJapaneseProductCode } from '@/data/barcode';
 import { findGoogleCover, lookupIsbn } from '@/data/isbn';
+import { LANGUAGES } from '@/data/language';
 import { isbnKey } from '@/data/library';
 import { modeLabel, READING_MODES } from '@/data/status';
 import { useStore, type NewBook } from '@/data/store';
@@ -23,7 +25,7 @@ export function ScanCheckin() {
   const { children, activeChild, library, checkIn } = useStore();
   const [isbn, setIsbn] = useState('');
   const [book, setBook] = useState<NewBook>();
-  const [notFound, setNotFound] = useState(false);
+  const [notFound, setNotFound] = useState<false | 'isbn' | 'other'>(false);
   const [looking, setLooking] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [childId, setChildId] = useState<string>();
@@ -49,8 +51,9 @@ export function ScanCheckin() {
     const found = await lookupIsbn(clean).catch(() => null);
     setLooking(false);
     if (!found) {
-      setNotFound(true);
-      setBook({ title: '', author: '', language: 'zh', isbn: clean });
+      const other = isBookBarcode(clean) && !isIsbn13(clean);
+      setNotFound(other ? 'other' : 'isbn');
+      setBook({ title: '', author: '', language: isJapaneseProductCode(clean) ? 'ja' : 'zh', isbn: clean });
       return;
     }
     setBook({
@@ -112,7 +115,9 @@ export function ScanCheckin() {
         <>
           {notFound ? (
             <ThemedText type="small" themeColor="textSecondary">
-              查不到這本書，請輸入書名，打卡後會加進全家書架。
+              {notFound === 'other'
+                ? '這是雜誌或商品條碼，不是 ISBN，查不到書名。請輸入書名，打卡後會加進全家書架，下次掃同一本就會直接帶出來。'
+                : '查不到這本書，請輸入書名，打卡後會加進全家書架。'}
             </ThemedText>
           ) : null}
           <View style={styles.row}>
@@ -126,6 +131,16 @@ export function ScanCheckin() {
                     value={book.author}
                     onChangeText={(author) => setBook({ ...book, author })}
                   />
+                  <View style={styles.chips}>
+                    {LANGUAGES.map((l) => (
+                      <Button
+                        key={l.value}
+                        title={l.label}
+                        selected={book.language === l.value}
+                        onPress={() => setBook({ ...book, language: l.value })}
+                      />
+                    ))}
+                  </View>
                 </>
               ) : (
                 <>

@@ -1,4 +1,4 @@
-import { isBookBarcode, isIsbn13, validEan13 } from '@/data/barcode';
+import { isBookBarcode, isIsbn13, isJapaneseProductCode, validEan13 } from '@/data/barcode';
 import { cleanOpenBdAuthor, lookupIsbn } from '@/data/isbn';
 import { fromLanguageCode, guessLanguage } from '@/data/language';
 
@@ -23,6 +23,8 @@ describe('book barcodes', () => {
     expect(isBookBarcode(isbn)).toBe(true);
     expect(isIsbn13(magazine)).toBe(false);
     expect(isBookBarcode(magazine)).toBe(true);
+    expect(isJapaneseProductCode(magazine)).toBe(true);
+    expect(isJapaneseProductCode(isbn)).toBe(false);
   });
 
   test("Japan's price bar under the ISBN and in-store stickers are skipped", () => {

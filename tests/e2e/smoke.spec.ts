@@ -140,3 +140,20 @@ test('scan check-in: a new book is logged for the chosen child and joins the fam
   await tab(page, '書架');
   await expect(shown(page, '掃描的書').first()).toBeVisible();
 });
+
+test('a Japanese magazine barcode (no ISBN) is checked in by hand, and found again the next time', async ({ page }) => {
+  await addChild(page, '小明');
+  await page.goto('');
+  // A made-up 491 magazine code with a valid check digit.
+  await page.getByPlaceholder('ISBN 或條碼數字').first().fill('4910123450650');
+  await button(page, '查詢').click();
+  await expect(shown(page, /這是雜誌或商品條碼/).first()).toBeVisible();
+  await page.getByPlaceholder('書名').first().fill('くまのえほん');
+  await button(page, '打卡').click();
+  await expect(shown(page, /已幫小明記上「くまのえほん」/).first()).toBeVisible();
+
+  await page.getByPlaceholder('ISBN 或條碼數字').first().fill('4910123450650');
+  await button(page, '查詢').click();
+  await expect(shown(page, '已在全家書架上').first()).toBeVisible();
+  await expect(shown(page, 'くまのえほん').first()).toBeVisible();
+});

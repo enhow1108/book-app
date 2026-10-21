@@ -7,7 +7,7 @@ import { IsbnScanner } from '@/components/isbn-scanner';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { isBookBarcode, isIsbn13 } from '@/data/barcode';
+import { isBookBarcode, isIsbn13, isJapaneseProductCode } from '@/data/barcode';
 import { pickCoverPhoto } from '@/data/cover-photo';
 import { findGoogleCover, lookupIsbn } from '@/data/isbn';
 import { LANGUAGES } from '@/data/language';
@@ -51,6 +51,7 @@ export function AddBookForm({ onClose }: { onClose: () => void }) {
       setAuthor('');
       setCoverUrl(undefined);
       setNotFound(key && isBookBarcode(key) && !isIsbn13(key) ? 'other' : 'isbn');
+      if (key && isJapaneseProductCode(key)) setLanguage('ja');
       return;
     }
     setTitle(found.title);

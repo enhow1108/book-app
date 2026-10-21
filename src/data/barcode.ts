@@ -19,3 +19,6 @@ export function isBookBarcode(code: string): boolean {
   if (code.startsWith('19') || code.startsWith('2')) return false;
   return true;
 }
+
+/** A Japanese product or magazine code (45/49), for guessing that a book without an ISBN is in Japanese. */
+export const isJapaneseProductCode = (code: string) => /^4[59]\d{11}$/.test(code);
