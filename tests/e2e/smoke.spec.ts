@@ -157,3 +157,18 @@ test('a Japanese magazine barcode (no ISBN) is checked in by hand, and found aga
   await expect(shown(page, '已在全家書架上').first()).toBeVisible();
   await expect(shown(page, 'くまのえほん').first()).toBeVisible();
 });
+
+test('check-in without a barcode: typing the title of a book on the shelf logs it, not a second copy', async ({ page }) => {
+  await addChild(page, '小明');
+  await page.goto('');
+  await button(page, '沒有條碼，自己輸入書名').click();
+  await page.getByPlaceholder('書名').first().fill('手寫的書');
+  await button(page, '打卡').click();
+  await expect(shown(page, '已幫小明記上「手寫的書」自己看 1 次，也加進全家書架了。').first()).toBeVisible();
+
+  await button(page, '沒有條碼，自己輸入書名').click();
+  await page.getByPlaceholder('書名').first().fill('手寫的書');
+  await button(page, '打卡').click();
+  await expect(shown(page, '已幫小明記上「手寫的書」自己看 1 次。').first()).toBeVisible();
+  await expect(shown(page, '今天 2 次 · 共 2 次').first()).toBeVisible();
+});

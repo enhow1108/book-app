@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { isBookBarcode, isIsbn13, isJapaneseProductCode } from '@/data/barcode';
+import { pickCoverPhoto } from '@/data/cover-photo';
 import { findGoogleCover, lookupIsbn } from '@/data/isbn';
 import { LANGUAGES } from '@/data/language';
 import { isbnKey } from '@/data/library';
@@ -25,7 +26,7 @@ export function ScanCheckin() {
   const { children, activeChild, library, checkIn } = useStore();
   const [isbn, setIsbn] = useState('');
   const [book, setBook] = useState<NewBook>();
-  const [notFound, setNotFound] = useState<false | 'isbn' | 'other'>(false);
+  const [notFound, setNotFound] = useState<false | 'isbn' | 'other' | 'typed'>(false);
   const [looking, setLooking] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [childId, setChildId] = useState<string>();
@@ -71,6 +72,19 @@ export function ScanCheckin() {
     }
   }
 
+  async function onPhoto(from: 'camera' | 'library') {
+    const photo = await pickCoverPhoto(from);
+    if (photo) setBook((b) => (b ? { ...b, coverUrl: photo } : b));
+  }
+
+  /** For a book with no barcode to scan: type its title (a book the family has is matched by title). */
+  function onType() {
+    setDone(undefined);
+    setIsbn('');
+    setNotFound('typed');
+    setBook({ title: '', author: '', language: 'zh' });
+  }
+
   function onScanned(code: string) {
     setScanning(false);
     setIsbn(code);
@@ -105,6 +119,11 @@ export function ScanCheckin() {
         <Button title="掃描" onPress={() => setScanning(true)} disabled={looking} />
         <Button title={looking ? '查詢中…' : '查詢'} onPress={() => onLookup()} disabled={!isbn || looking} />
       </View>
+      {notFound !== 'typed' ? (
+        <View style={styles.row}>
+          <Button title="沒有條碼，自己輸入書名" onPress={onType} />
+        </View>
+      ) : null}
       {done && !book ? (
         <ThemedText type="small" themeColor="textSecondary">
           {done}
@@ -115,7 +134,9 @@ export function ScanCheckin() {
         <>
           {notFound ? (
             <ThemedText type="small" themeColor="textSecondary">
-              {notFound === 'other'
+              {notFound === 'typed'
+                ? '輸入書名。書架上已經有的書會直接記上，新書會加進全家書架。'
+                : notFound === 'other'
                 ? '這是雜誌或商品條碼，不是 ISBN，查不到書名。請輸入書名，打卡後會加進全家書架，下次掃同一本就會直接帶出來。'
                 : '查不到這本書，請輸入書名，打卡後會加進全家書架。'}
             </ThemedText>
@@ -131,6 +152,10 @@ export function ScanCheckin() {
                     value={book.author}
                     onChangeText={(author) => setBook({ ...book, author })}
                   />
+                  <View style={styles.row}>
+                    <Button title="拍封面" onPress={() => onPhoto('camera')} />
+                    <Button title="選照片" onPress={() => onPhoto('library')} />
+                  </View>
                   <View style={styles.chips}>
                     {LANGUAGES.map((l) => (
                       <Button
