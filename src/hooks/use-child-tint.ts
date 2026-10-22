@@ -1,9 +1,10 @@
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useStore } from '@/data/store';
 
-// Soft page tints, one per child in the order they were added, so it is clear whose books are on screen.
-const LIGHT = ['#FFE9DC', '#E2EFFF', '#E3F5E7', '#EFE4FF', '#FFF2D1', '#FFE3EC'];
-const DARK = ['#2A1D17', '#16202C', '#16241A', '#221A2C', '#28220F', '#2A1820'];
+// Page tints, one per child in the order they were added, so it is clear whose books are on screen.
+// Neighbours alternate warm and cool so siblings never get look-alike colours.
+const LIGHT = ['#FFD9C2', '#C9E2FF', '#FFE9A3', '#C8EDD3', '#FFCFE0', '#DCCFFF'];
+const DARK = ['#3A2418', '#162A42', '#3A3010', '#163222', '#3A1626', '#261C42'];
 
 /** The active child's page background, or undefined to keep the normal one. */
 export function useChildTint() {
