@@ -3,12 +3,14 @@ import { StyleSheet, View } from 'react-native';
 
 import { BookCover } from '@/components/book-cover';
 import { Button, Field } from '@/components/form';
+import { dayLabel } from '@/components/day-picker';
 import { IsbnScanner } from '@/components/isbn-scanner';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { isBookBarcode, isIsbn13, isJapaneseProductCode } from '@/data/barcode';
 import { pickCoverPhoto } from '@/data/cover-photo';
+import { toDayKey } from '@/data/dates';
 import { findGoogleCover, lookupIsbn } from '@/data/isbn';
 import { LANGUAGES } from '@/data/language';
 import { isbnKey } from '@/data/library';
@@ -22,7 +24,7 @@ const MAX_TIMES = 20;
  * Scan a book's barcode and log it in one go: pick which child read it, how, and how many times.
  * A book the family doesn't have yet joins the family shelf on the way.
  */
-export function ScanCheckin() {
+export function ScanCheckin({ date }: { date?: string }) {
   const { children, activeChild, library, checkIn } = useStore();
   const [isbn, setIsbn] = useState('');
   const [book, setBook] = useState<NewBook>();
@@ -93,9 +95,15 @@ export function ScanCheckin() {
 
   function onCheckIn() {
     if (!book || !who || !book.title.trim()) return;
-    checkIn({ book: { ...book, title: book.title.trim(), author: book.author.trim() }, childId: who.id, mode, times });
+    checkIn({
+      book: { ...book, title: book.title.trim(), author: book.author.trim() },
+      childId: who.id,
+      mode,
+      times,
+      date,
+    });
     setDone(
-      `已幫${who.name}記上「${book.title.trim()}」${modeLabel(mode)} ${times} 次${known ? '' : '，也加進全家書架了'}。`,
+      `已幫${who.name}記上${date && date !== toDayKey(new Date()) ? dayLabel(date) : ''}「${book.title.trim()}」${modeLabel(mode)} ${times} 次${known ? '' : '，也加進全家書架了'}。`,
     );
     setBook(undefined);
     setIsbn('');

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BookCover } from '@/components/book-cover';
 import { confirmDestructive } from '@/components/dialogs';
+import { LogEditor } from '@/components/log-editor';
 import { Button } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -30,6 +31,7 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
   const { activeChild, children, books, logs, allLogs, state, updateBook, removeBook, changeReadsToday } = useStore();
   const [mode, setMode] = useState<ReadingMode>('self');
   const [showAll, setShowAll] = useState(false);
+  const [editingLogId, setEditingLogId] = useState<string>();
   const book = books.find((b) => b.id === bookId);
   if (!book) return null;
 
@@ -131,7 +133,7 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
               <ThemedView type="backgroundElement" style={[styles.card, styles.history]}>
                 <ThemedText type="smallBold">閱讀紀錄</ThemedText>
                 {shownLogs.map((l) => (
-                  <View key={l.id} style={styles.historyRow}>
+                  <Pressable key={l.id} style={styles.historyRow} onPress={() => setEditingLogId(l.id)}>
                     <ThemedText type="small" style={styles.historyDate}>
                       {shortDate(l.date, true)}
                     </ThemedText>
@@ -140,7 +142,10 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
                         .filter(Boolean)
                         .join(' · ')}
                     </ThemedText>
-                  </View>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      修改
+                    </ThemedText>
+                  </Pressable>
                 ))}
                 {familyLogs.length > HISTORY_ROWS ? (
                   <Button
@@ -155,6 +160,13 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
               <View style={styles.row}>
                 <Button title="移除這本書" onPress={onRemove} />
               </View>
+            ) : null}
+            {editingLogId && familyLogs.some((l) => l.id === editingLogId) ? (
+              <LogEditor
+                key={editingLogId}
+                log={familyLogs.find((l) => l.id === editingLogId)!}
+                onClose={() => setEditingLogId(undefined)}
+              />
             ) : null}
           </ScrollView>
         </SafeAreaView>

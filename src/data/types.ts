@@ -13,6 +13,8 @@ export type Child = {
   age?: number;
   /** One of AVATARS. */
   avatar: string;
+  /** Key of the page colour picked for this child, one of CHILD_COLORS; unset means one by their order. */
+  color?: string;
 };
 
 /** A book in the family library, shared by all children. */

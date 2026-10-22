@@ -46,12 +46,15 @@ type Store = {
   removeBook: (id: string) => void;
   addLog: (log: Omit<ReadingLog, 'id' | 'childId'>) => void;
   /** Adds (or with -1 removes) one read of a book today, done in the given way, for the active child. */
-  changeReadsToday: (bookId: string, delta: 1 | -1, mode: ReadingMode) => void;
+  changeReadsToday: (bookId: string, delta: 1 | -1, mode: ReadingMode, date?: string) => void;
+  /** Changes a reading log, e.g. fixes its date, child, way of reading or count. */
+  updateLog: (id: string, patch: Partial<Pick<ReadingLog, 'date' | 'childId' | 'mode' | 'times' | 'note'>>) => void;
+  removeLog: (id: string) => void;
   /**
    * Logs some reads of a book today for one child, done the given way, and makes that child the active one.
    * A book the family doesn't have yet is added to the family shelf first.
    */
-  checkIn: (input: { book: NewBook; childId: string; mode: ReadingMode; times: number }) => void;
+  checkIn: (input: { book: NewBook; childId: string; mode: ReadingMode; times: number; date?: string }) => void;
   applyImport: (plan: ImportPlan) => void;
   undoImport: (id: string) => void;
   /** Adds back what a backup file has and the app doesn't. */
@@ -107,9 +110,15 @@ function dropUnshelved(s: State, bookIds: Iterable<string>): State {
 /** A book as found by an ISBN lookup or typed in, before it has a place in the family library. */
 export type NewBook = Omit<LibraryBook, 'id' | 'addedAt'>;
 
-/** Adds (or with a negative count removes) quick reads of a book today for a child, done the given way. */
-function addReadsToday(s: State, childId: string, bookId: string, mode: ReadingMode, delta: number): State {
-  const date = toDayKey(new Date());
+/** Adds (or with a negative count removes) quick reads of a book on a day (today unless given) for a child. */
+function addReadsToday(
+  s: State,
+  childId: string,
+  bookId: string,
+  mode: ReadingMode,
+  delta: number,
+  date = toDayKey(new Date()),
+): State {
   // Quick reads of a book on a given day, done the same way, share one log without a note.
   const quickToday = s.logs.filter(
     (l) => l.childId === childId && l.bookId === bookId && l.date === date && !l.minutes && !l.note && !l.importId,
@@ -322,9 +331,20 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
             )
           : s,
       ),
-    changeReadsToday: (bookId, delta, mode) =>
-      setState((s) => (s.activeChildId ? addReadsToday(s, s.activeChildId, bookId, mode, delta) : s)),
-    checkIn: ({ book, childId, mode, times }) =>
+    changeReadsToday: (bookId, delta, mode, date) =>
+      setState((s) => (s.activeChildId ? addReadsToday(s, s.activeChildId, bookId, mode, delta, date) : s)),
+    updateLog: (id, patch) =>
+      setState((s) => {
+        const log = s.logs.find((l) => l.id === id);
+        if (!log) return s;
+        const next = { ...log, ...patch };
+        if (next.times !== undefined && next.times < 1) return s;
+        const updated = { ...s, logs: s.logs.map((l) => (l.id === id ? next : l)) };
+        // A read moved to another child puts the book on that child's shelf.
+        return onShelf(updated, next.childId, next.bookId);
+      }),
+    removeLog: (id) => setState((s) => ({ ...s, logs: s.logs.filter((l) => l.id !== id) })),
+    checkIn: ({ book, childId, mode, times, date }) =>
       setState((s) => {
         if (times < 1 || !s.children.some((c) => c.id === childId)) return s;
         // The same book the family already has (by ISBN, else title) is read again rather than added twice.
@@ -339,7 +359,7 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
           : same
             ? s.books.map((b) => (b.id === same.id ? library : b))
             : [library, ...s.books];
-        return addReadsToday({ ...s, books, activeChildId: childId }, childId, library.id, mode, times);
+        return addReadsToday({ ...s, books, activeChildId: childId }, childId, library.id, mode, times, date);
       }),
     applyImport: (plan) =>
       setState((s) => {

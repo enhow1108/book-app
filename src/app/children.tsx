@@ -8,9 +8,12 @@ import { SyncPanel } from '@/components/sync-panel';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { CHILD_COLORS, childColor } from '@/data/child-colors';
 import { AVATARS, parseAge } from '@/data/children';
 import { useStore } from '@/data/store';
 import type { Child } from '@/data/types';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function ChildrenScreen() {
   const { children, activeChild, addChild, updateChild, removeChild, setActiveChild } = useStore();
@@ -18,12 +21,16 @@ export default function ChildrenScreen() {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [avatar, setAvatar] = useState(AVATARS[0]);
+  const [color, setColor] = useState<string>();
+  const theme = useTheme();
+  const dark = useColorScheme() === 'dark';
 
   function resetForm() {
     setEditingId(undefined);
     setName('');
     setAge('');
     setAvatar(AVATARS[0]);
+    setColor(undefined);
   }
 
   function onEdit(child: Child) {
@@ -31,10 +38,11 @@ export default function ChildrenScreen() {
     setName(child.name);
     setAge(child.age ? String(child.age) : '');
     setAvatar(child.avatar);
+    setColor(childColor(children, child.id)?.key);
   }
 
   function onSave() {
-    const child = { name: name.trim(), age: parseAge(age), avatar };
+    const child = { name: name.trim(), age: parseAge(age), avatar, ...(color ? { color } : {}) };
     if (editingId) updateChild(editingId, child);
     else addChild(child);
     resetForm();
@@ -57,7 +65,17 @@ export default function ChildrenScreen() {
           {children.map((child) => (
             <ThemedView key={child.id} type="backgroundElement" style={styles.childRow}>
               <Pressable style={styles.childInfo} onPress={() => setActiveChild(child.id)}>
-                <ThemedText style={styles.avatar}>{child.avatar}</ThemedText>
+                <View
+                  style={[
+                    styles.swatch,
+                    {
+                      backgroundColor: dark
+                        ? childColor(children, child.id)?.dark
+                        : childColor(children, child.id)?.light,
+                    },
+                  ]}>
+                  <ThemedText style={styles.avatar}>{child.avatar}</ThemedText>
+                </View>
                 <View>
                   <ThemedText type="smallBold">
                     {child.name}
@@ -82,6 +100,24 @@ export default function ChildrenScreen() {
             <View style={styles.avatars}>
               {AVATARS.map((a) => (
                 <Button key={a} title={a} selected={a === avatar} onPress={() => setAvatar(a)} />
+              ))}
+            </View>
+            <ThemedText type="small" themeColor="textSecondary">
+              底色（書架、打卡、紀錄頁會換成這個顏色）
+            </ThemedText>
+            <View style={styles.avatars}>
+              {CHILD_COLORS.map((c) => (
+                <Pressable
+                  key={c.key}
+                  accessibilityLabel={`${c.label}色`}
+                  onPress={() => setColor(c.key)}
+                  style={[
+                    styles.colorDot,
+                    { backgroundColor: dark ? c.dark : c.light },
+                    color === c.key && { borderColor: theme.text },
+                  ]}>
+                  <ThemedText type="small">{c.label}</ThemedText>
+                </Pressable>
               ))}
             </View>
             <View style={styles.actions}>
@@ -113,6 +149,16 @@ const styles = StyleSheet.create({
   },
   childInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   avatar: { fontSize: 28, lineHeight: 36 },
+  swatch: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  colorDot: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatars: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: Spacing.two },
 });

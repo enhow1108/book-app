@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BookCover } from '@/components/book-cover';
 import { ChildSwitcher } from '@/components/child-switcher';
+import { DayPicker } from '@/components/day-picker';
+import { LogEditor } from '@/components/log-editor';
 import { ScanCheckin } from '@/components/scan-checkin';
 import { Button, Field } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
@@ -23,10 +25,14 @@ export default function CheckinScreen() {
   const [search, setSearch] = useState('');
   const [mode, setMode] = useState<ReadingMode>('self');
   const [note, setNote] = useState('');
+  const [day, setDay] = useState(() => toDayKey(new Date()));
+  const [editingLogId, setEditingLogId] = useState<string>();
 
   // The picked book may belong to another child after switching profiles.
   const canSave = books.some((b) => b.id === bookId) && note.trim().length > 0;
-  const today = toDayKey(new Date());
+  // Reads are logged on the picked day, today unless a parent goes back to catch up.
+  const today = day;
+  const dayWord = day === toDayKey(new Date()) ? '今天' : '這天';
   const query = search.trim().toLowerCase();
   // Ordered by the whole family's reading, so a book a sibling read today is right at the top to add.
   const ordered = useMemo(() => recentBooks(books, allLogs), [books, allLogs]);
@@ -54,13 +60,14 @@ export default function CheckinScreen() {
     return byBook;
   }, [allLogs, children, activeChild?.id, today]);
   const siblingsLine = (id: string) =>
-    [...(siblingsToday.get(id) ?? [])].map(([name, times]) => `${name}今天 ${times} 次`).join(' · ');
+    [...(siblingsToday.get(id) ?? [])].map(([name, times]) => `${name}${dayWord} ${times} 次`).join(' · ');
   const titles = useMemo(() => new Map(books.map((b) => [b.id, b.title])), [books]);
   const titleOf = (id: string) => titles.get(id) ?? '已移除的書';
+  const editingLog = allLogs.find((l) => l.id === editingLogId);
 
   function onSave() {
     if (!bookId) return;
-    addLog({ bookId, times: 1, mode, note: note.trim(), date: toDayKey(new Date()) });
+    addLog({ bookId, times: 1, mode, note: note.trim(), date: day });
     setNote('');
   }
 
@@ -70,7 +77,11 @@ export default function CheckinScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           <ThemedText type="subtitle">今日打卡</ThemedText>
           <ChildSwitcher />
-          <ScanCheckin />
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="smallBold">打卡日期</ThemedText>
+            <DayPicker day={day} onChange={setDay} />
+          </ThemedView>
+          <ScanCheckin date={day} />
 
           <View style={styles.stats}>
             <Stat label="連續天數" value={currentStreak(logs)} />
@@ -104,7 +115,7 @@ export default function CheckinScreen() {
                         {book.title}
                       </ThemedText>
                       <ThemedText type="small" themeColor="textSecondary">
-                        {allReads ? `今天 ${todayReads} 次 · 共 ${allReads} 次` : '還沒讀過'}
+                        {allReads ? `${dayWord} ${todayReads} 次 · 共 ${allReads} 次` : '還沒讀過'}
                       </ThemedText>
                       {siblingsLine(book.id) ? (
                         <ThemedText type="small" themeColor="textSecondary">
@@ -112,8 +123,8 @@ export default function CheckinScreen() {
                         </ThemedText>
                       ) : null}
                     </View>
-                    {todayReads > 0 ? <Button title="−" onPress={() => changeReadsToday(book.id, -1, mode)} /> : null}
-                    <Button title={`${modeLabel(mode)} +1`} onPress={() => changeReadsToday(book.id, 1, mode)} />
+                    {todayReads > 0 ? <Button title="−" onPress={() => changeReadsToday(book.id, -1, mode, day)} /> : null}
+                    <Button title={`${modeLabel(mode)} +1`} onPress={() => changeReadsToday(book.id, 1, mode, day)} />
                   </View>
                 );
               })}
@@ -143,13 +154,18 @@ export default function CheckinScreen() {
           </ThemedView>
 
           {logs.slice(0, 20).map((log) => (
-            <ThemedView key={log.id} type="backgroundElement" style={styles.logRow}>
-              <ThemedText type="smallBold">{titleOf(log.bookId)}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {[log.date, modeLabel(log.mode), `${log.times ?? 1} 次`, log.note ?? ''].filter(Boolean).join(' · ')}
-              </ThemedText>
-            </ThemedView>
+            <Pressable key={log.id} onPress={() => setEditingLogId(log.id)}>
+              <ThemedView type="backgroundElement" style={styles.logRow}>
+                <ThemedText type="smallBold">{titleOf(log.bookId)}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {[log.date, modeLabel(log.mode), `${log.times ?? 1} 次`, log.note ?? '', '點一下修改']
+                    .filter(Boolean)
+                    .join(' · ')}
+                </ThemedText>
+              </ThemedView>
+            </Pressable>
           ))}
+          {editingLog ? <LogEditor key={editingLog.id} log={editingLog} onClose={() => setEditingLogId(undefined)} /> : null}
         </ScrollView>
       </SafeAreaView>
     </ThemedView>

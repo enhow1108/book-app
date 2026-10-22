@@ -115,6 +115,39 @@ test('a scanned book is checked in for the chosen child, joining the family shel
   expect(reads(result.current.allLogs)).toBe(6);
 });
 
+test('reads can be logged on a past day, then corrected or deleted', async () => {
+  const seed = { ...twoKids, books: [book('a', 'A')] };
+  const { result } = await openStore(seed);
+  await act(() => result.current.changeReadsToday('a', 1, 'mom', '2026-10-01'));
+  await act(() => result.current.changeReadsToday('a', 1, 'mom', '2026-10-01'));
+  await act(() =>
+    result.current.checkIn({ book: { title: 'B', author: '', language: 'zh' }, childId: 'k1', mode: 'self', times: 1, date: '2026-10-02' }),
+  );
+  expect(result.current.logs.map((l) => [l.date, l.times]).sort()).toEqual([
+    ['2026-10-01', 2],
+    ['2026-10-02', 1],
+  ]);
+
+  // Moving a read to the other child also puts the book on that child's shelf.
+  const log = result.current.logs.find((l) => l.bookId === 'a')!;
+  await act(() => result.current.updateLog(log.id, { childId: 'k2', mode: 'together', times: 3, date: '2026-09-30' }));
+  expect(result.current.allLogs.find((l) => l.id === log.id)).toMatchObject({
+    childId: 'k2',
+    mode: 'together',
+    times: 3,
+    date: '2026-09-30',
+  });
+  expect(result.current.state.shelf.some((e) => e.id === 'k2:a')).toBe(true);
+  // A count below one is refused rather than saved.
+  await act(() => result.current.updateLog(log.id, { times: 0 }));
+  expect(result.current.allLogs.find((l) => l.id === log.id)?.times).toBe(3);
+
+  await act(() => result.current.removeLog(log.id));
+  expect(result.current.allLogs.some((l) => l.id === log.id)).toBe(false);
+  await flush();
+  expect(mockDb.tables.logs.has(log.id)).toBe(false);
+});
+
 test('removing a book takes it off one shelf; the family keeps it while a sibling has it', async () => {
   const seed = {
     ...twoKids,

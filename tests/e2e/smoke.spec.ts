@@ -172,3 +172,44 @@ test('check-in without a barcode: typing the title of a book on the shelf logs i
   await expect(shown(page, '已幫小明記上「手寫的書」自己看 1 次。').first()).toBeVisible();
   await expect(shown(page, '今天 2 次 · 共 2 次').first()).toBeVisible();
 });
+
+test('check in for yesterday, then fix and delete the record', async ({ page }) => {
+  await addChild(page, '小明');
+  await addChild(page, '小美');
+  await page.goto('');
+  await button(page, '‹ 前一天').click();
+  await expect(shown(page, '昨天').first()).toBeVisible();
+  await button(page, '沒有條碼，自己輸入書名').click();
+  await page.getByPlaceholder('書名').first().fill('昨天的書');
+  await button(page, '打卡').click();
+  await expect(shown(page, '已幫小明記上昨天「昨天的書」自己看 1 次，也加進全家書架了。').first()).toBeVisible();
+  await expect(shown(page, '這天 1 次 · 共 1 次').first()).toBeVisible();
+
+  await page.getByText(/點一下修改/).filter({ visible: true }).first().click();
+  await expect(shown(page, '修改打卡紀錄').first()).toBeVisible();
+  await button(page, '🐛 小美').click();
+  await button(page, '＋').click();
+  await button(page, '儲存').click();
+  // The read now belongs to 小美, with the count fixed to 2.
+  await page.goto('children');
+  await shown(page, /^小美/).first().click();
+  await page.goto('');
+  await expect(page.getByText(/自己看 · 2 次 · 點一下修改/).filter({ visible: true }).first()).toBeVisible();
+
+  await page.getByText(/點一下修改/).filter({ visible: true }).first().click();
+  await button(page, '刪除這筆').click();
+  await expect(page.getByText(/點一下修改/).filter({ visible: true })).toHaveCount(0);
+});
+
+test('a child can be given their own page colour', async ({ page }) => {
+  await addChild(page, '小明');
+  await button(page, '編輯').click();
+  await page.getByLabel('紫色').click();
+  await button(page, '儲存').click();
+  await page.goto('');
+  await expect(shown(page, '今日打卡').first()).toBeVisible();
+  const backgrounds = await page.evaluate(() =>
+    [...document.querySelectorAll('div')].map((d) => getComputedStyle(d).backgroundColor),
+  );
+  expect(backgrounds).toContain('rgb(220, 207, 255)');
+});
