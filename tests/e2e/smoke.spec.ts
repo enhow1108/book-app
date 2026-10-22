@@ -191,9 +191,7 @@ test('check in for yesterday, then fix and delete the record', async ({ page }) 
   await button(page, '＋').click();
   await button(page, '儲存').click();
   // The read now belongs to 小美, with the count fixed to 2.
-  await page.goto('children');
-  await shown(page, /^小美/).first().click();
-  await page.goto('');
+  await shown(page, '小美').first().click();
   await expect(page.getByText(/自己看 · 2 次 · 點一下修改/).filter({ visible: true }).first()).toBeVisible();
 
   await page.getByText(/點一下修改/).filter({ visible: true }).first().click();
@@ -206,7 +204,8 @@ test('a child can be given their own page colour', async ({ page }) => {
   await button(page, '編輯').click();
   await page.getByLabel('紫色').click();
   await button(page, '儲存').click();
-  await page.goto('');
+  // Switch tabs in the page: a reload right after saving could race the database write.
+  await tab(page, '打卡');
   await expect(shown(page, '今日打卡').first()).toBeVisible();
   const backgrounds = await page.evaluate(() =>
     [...document.querySelectorAll('div')].map((d) => getComputedStyle(d).backgroundColor),
