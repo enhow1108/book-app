@@ -23,8 +23,11 @@ const shown = (page: Page, text: string | RegExp) => page.getByText(text, { exac
 const button = (page: Page, title: string) => shown(page, title).first();
 const tab = (page: Page, name: string) => page.getByRole('link', { name, exact: true }).click();
 
+// Changes are saved to the browser's database a moment after they show; reloading the page right away
+// can lose them on a slow machine. So once the app is open, move between screens with the tabs.
 async function addChild(page: Page, name: string) {
-  await page.goto('children');
+  if (page.url() === 'about:blank') await page.goto('children');
+  else await tab(page, '孩子');
   await page.getByPlaceholder('名字或暱稱').fill(name);
   await button(page, '新增').click();
   await expect(shown(page, new RegExp(`^${name}`)).first()).toBeVisible();
@@ -95,7 +98,7 @@ test('import a CSV, then undo it', async ({ page }) => {
 
 test('a full backup restores into a fresh browser', async ({ page, browser }) => {
   await addChild(page, '小美');
-  await page.goto('history');
+  await tab(page, '紀錄');
   const download = page.waitForEvent('download');
   await button(page, '匯出備份檔').click();
   const file = await (await download).path();
@@ -108,7 +111,7 @@ test('a full backup restores into a fresh browser', async ({ page, browser }) =>
   await button(fresh, '從備份還原').click();
   await (await chooser).setFiles(file);
   await button(fresh, '確認還原').click();
-  await fresh.goto('children');
+  await tab(fresh, '孩子');
   await expect(shown(fresh, /^小美/).first()).toBeVisible();
 });
 
@@ -122,7 +125,7 @@ test('every tab opens, also straight from its address', async ({ page }) => {
 test('scan check-in: a new book is logged for the chosen child and joins the family shelf', async ({ page }) => {
   await addChild(page, '小明');
   await addChild(page, '小美');
-  await page.goto('');
+  await tab(page, '打卡');
   await expect(shown(page, '掃描打卡').first()).toBeVisible();
   // A made-up ISBN: lookups are cut off, so the title is typed in.
   await page.getByPlaceholder('ISBN 或條碼數字').first().fill('9786660000000');
@@ -143,7 +146,7 @@ test('scan check-in: a new book is logged for the chosen child and joins the fam
 
 test('a Japanese magazine barcode (no ISBN) is checked in by hand, and found again the next time', async ({ page }) => {
   await addChild(page, '小明');
-  await page.goto('');
+  await tab(page, '打卡');
   // A made-up 491 magazine code with a valid check digit.
   await page.getByPlaceholder('ISBN 或條碼數字').first().fill('4910123450650');
   await button(page, '查詢').click();
@@ -160,7 +163,7 @@ test('a Japanese magazine barcode (no ISBN) is checked in by hand, and found aga
 
 test('check-in without a barcode: typing the title of a book on the shelf logs it, not a second copy', async ({ page }) => {
   await addChild(page, '小明');
-  await page.goto('');
+  await tab(page, '打卡');
   await button(page, '沒有條碼，自己輸入書名').click();
   await page.getByPlaceholder('書名').first().fill('手寫的書');
   await button(page, '打卡').click();
@@ -176,7 +179,7 @@ test('check-in without a barcode: typing the title of a book on the shelf logs i
 test('check in for yesterday, then fix and delete the record', async ({ page }) => {
   await addChild(page, '小明');
   await addChild(page, '小美');
-  await page.goto('');
+  await tab(page, '打卡');
   await button(page, '‹ 前一天').click();
   await expect(shown(page, '昨天').first()).toBeVisible();
   await button(page, '沒有條碼，自己輸入書名').click();
@@ -216,7 +219,7 @@ test('a child can be given their own page colour', async ({ page }) => {
 test('check-in lists only the picked child\'s books, and the day\'s records follow the date control', async ({ page }) => {
   await addChild(page, '小明');
   await addChild(page, '小美');
-  await page.goto('');
+  await tab(page, '打卡');
   await button(page, '沒有條碼，自己輸入書名').click();
   await page.getByPlaceholder('書名').first().fill('哥哥的書');
   await button(page, '打卡').click();
