@@ -49,7 +49,7 @@ test('add a child, a book and a read; it is all still there after a reload', asy
   await expect(shown(page, '測試的書').first()).toBeVisible();
 
   await tab(page, '打卡');
-  await expect(shown(page, '全家最近讀的書').first()).toBeVisible();
+  await expect(shown(page, '小明最近讀的書').first()).toBeVisible();
   await button(page, '媽媽唸').click();
   await button(page, '媽媽唸 +1').click();
   await button(page, '媽媽唸 +1').click();
@@ -192,7 +192,7 @@ test('check in for yesterday, then fix and delete the record', async ({ page }) 
   await button(page, '儲存').click();
   // The read now belongs to 小美, with the count fixed to 2.
   await shown(page, '小美').first().click();
-  await expect(page.getByText(/自己看 · 2 次 · 點一下修改/).filter({ visible: true }).first()).toBeVisible();
+  await expect(shown(page, '自己看 · 2 次').first()).toBeVisible();
 
   await page.getByText(/點一下修改/).filter({ visible: true }).first().click();
   await button(page, '刪除這筆').click();
@@ -211,4 +211,26 @@ test('a child can be given their own page colour', async ({ page }) => {
     [...document.querySelectorAll('div')].map((d) => getComputedStyle(d).backgroundColor),
   );
   expect(backgrounds).toContain('rgb(220, 207, 255)');
+});
+
+test('check-in lists only the picked child\'s books, and the day\'s records follow the date control', async ({ page }) => {
+  await addChild(page, '小明');
+  await addChild(page, '小美');
+  await page.goto('');
+  await button(page, '沒有條碼，自己輸入書名').click();
+  await page.getByPlaceholder('書名').first().fill('哥哥的書');
+  await button(page, '打卡').click();
+  await expect(shown(page, '小明最近讀的書').first()).toBeVisible();
+  await expect(shown(page, '今天的紀錄').first()).toBeVisible();
+  await expect(shown(page, '點一下修改')).toHaveCount(1);
+
+  // 小美 hasn't read it, so it isn't in her list even though it's on the family shelf.
+  await shown(page, '小美').first().click();
+  await expect(shown(page, '小美這天還沒有紀錄。可以用上面的「‹ 前一天」「後一天 ›」看別天。').first()).toBeVisible();
+  await expect(shown(page, '哥哥的書')).toHaveCount(0);
+
+  await shown(page, '小明').first().click();
+  await button(page, '‹ 前一天').click();
+  await expect(shown(page, '昨天的紀錄').first()).toBeVisible();
+  await expect(shown(page, '點一下修改')).toHaveCount(0);
 });
