@@ -1,5 +1,5 @@
 import { useCameraPermissions } from 'expo-camera';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,31 +16,56 @@ const insecureWeb = Platform.OS === 'web' && typeof window !== 'undefined' && !w
 /** How long a non-ISBN barcode waits in case an ISBN on the same cover shows up too. */
 const OTHER_CODE_WAIT_MS = 800;
 
+/** In continuous mode, how long after a book is read before the next one is looked for. */
+const NEXT_BOOK_PAUSE_MS = 1500;
+
 /**
  * Full-screen camera that reads a book's EAN-13 barcode and hands it back once. Mount it only while scanning.
  * ISBNs win; a book without one (such as a Japanese monthly picture book with a magazine code) gives its other barcode.
+ * With `continuous` the camera stays open and hands back each new book in turn, with `children` (such as the
+ * list of books scanned so far) shown under the camera.
  */
-export function IsbnScanner({ onScanned, onClose }: {
+export function IsbnScanner({ onScanned, onClose, continuous, children }: {
   onScanned: (isbn: string) => void;
   onClose: () => void;
+  continuous?: boolean;
+  children?: ReactNode;
 }) {
   const [permission, requestPermission] = useCameraPermissions();
   // The camera fires many events per second; only take the first book barcode.
   const done = useRef(false);
+  const seen = useRef(new Set<string>());
+  const [flash, setFlash] = useState(false);
   const waiting = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(waiting.current), []);
+  const pause = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(
+    () => () => {
+      clearTimeout(waiting.current);
+      clearTimeout(pause.current);
+    },
+    [],
+  );
 
   function finish(code: string) {
     if (done.current) return;
     done.current = true;
     clearTimeout(waiting.current);
+    waiting.current = undefined;
     onScanned(code);
+    if (!continuous) return;
+    // The same book stays in view for a moment, and its other barcodes (a price bar) with it: skip them.
+    seen.current.add(code);
+    setFlash(true);
+    pause.current = setTimeout(() => {
+      done.current = false;
+      setFlash(false);
+    }, NEXT_BOOK_PAUSE_MS);
   }
 
   function onBarcode(data: string) {
     // Some readers append a magazine's 5-digit add-on after the 13 digits.
     const code = data.replace(/\D/g, '').slice(0, 13);
-    if (done.current || !isBookBarcode(code)) return;
+    if (done.current || !isBookBarcode(code) || seen.current.has(code)) return;
     if (isIsbn13(code)) return finish(code);
     if (!waiting.current) waiting.current = setTimeout(() => finish(code), OTHER_CODE_WAIT_MS);
   }
@@ -49,7 +74,7 @@ export function IsbnScanner({ onScanned, onClose }: {
     <Modal animationType="slide" onRequestClose={onClose}>
       <ThemedView style={styles.container}>
         <SafeAreaView style={styles.safeArea}>
-          <ThemedText type="subtitle">掃描書的條碼</ThemedText>
+          <ThemedText type="subtitle">{continuous ? '一本接一本掃' : '掃描書的條碼'}</ThemedText>
           {insecureWeb ? (
             <Message text="瀏覽器只允許 HTTPS 網址使用相機。請改用 HTTPS 網址開啟，或手動輸入 ISBN。" />
           ) : !permission ? null : !permission.granted ? (
@@ -66,13 +91,20 @@ export function IsbnScanner({ onScanned, onClose }: {
           ) : (
             <View style={styles.cameraBox}>
               <IsbnCamera onBarcode={onBarcode} />
-              <View style={styles.frame} pointerEvents="none" />
+              <View style={[styles.frame, flash && styles.frameDone]} pointerEvents="none" />
             </View>
           )}
-          <ThemedText type="small" themeColor="textSecondary">
-            對準書背上以 978 或 979 開頭的 ISBN 條碼；沒有 ISBN 的日本月刊繪本可以掃雜誌條碼（491 開頭）。手機離書約 15–20 公分，畫面模糊時把書稍微拿遠一點。
-          </ThemedText>
-          <Button title="取消" onPress={onClose} />
+          {continuous ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              框線變綠就是掃到了，換下一本。掃完按「完成」。
+            </ThemedText>
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary">
+              對準書背上以 978 或 979 開頭的 ISBN 條碼；沒有 ISBN 的日本月刊繪本可以掃雜誌條碼（491 開頭）。手機離書約 15–20 公分，畫面模糊時把書稍微拿遠一點。
+            </ThemedText>
+          )}
+          {children ? <View style={styles.extra}>{children}</View> : null}
+          <Button title={continuous ? '完成' : '取消'} onPress={onClose} />
         </SafeAreaView>
       </ThemedView>
     </Modal>
@@ -104,5 +136,7 @@ const styles = StyleSheet.create({
     borderColor: 'white',
     borderRadius: Spacing.two,
   },
+  frameDone: { borderColor: '#3ecf6e', borderWidth: 4 },
+  extra: { maxHeight: '35%' },
   message: { flex: 1, justifyContent: 'center', gap: Spacing.three },
 });

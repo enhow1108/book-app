@@ -255,3 +255,39 @@ describe('what cloud sync sees', () => {
     expect(mockDb.meta['sync.lastSeen']).toBe('x');
   });
 });
+
+test('a pile of scanned books is added at once, without doubling books the family has', async () => {
+  const { result } = await openStore(state({ ...twoKids, books: [book('b1', '月亮晚安', { isbn: '9780000000011' })] }));
+  await act(() =>
+    result.current.addBooks([
+      { title: '月亮晚安', author: '', language: 'zh', isbn: '9780000000011', coverUrl: 'https://example.com/c.jpg' },
+      { title: '好餓的毛毛蟲', author: '', language: 'zh', isbn: '9780000000028' },
+      { title: '好餓的毛毛蟲', author: '', language: 'zh', isbn: '9780000000028' },
+    ]),
+  );
+  expect(result.current.library.map((b) => b.title).sort()).toEqual(['好餓的毛毛蟲', '月亮晚安']);
+  expect(result.current.library.find((b) => b.id === 'b1')?.coverUrl).toBe('https://example.com/c.jpg');
+  // Only joining the family shelf: nobody has read them yet.
+  expect(result.current.allLogs).toHaveLength(0);
+  expect(result.current.state.shelf).toHaveLength(0);
+});
+
+test('a pile of scanned books can be checked in for one child at once', async () => {
+  const { result } = await openStore(state({ ...twoKids, books: [book('b1', '月亮晚安', { isbn: '9780000000011' })] }));
+  await act(() =>
+    result.current.addBooks(
+      [
+        { title: '月亮晚安', author: '', language: 'zh', isbn: '9780000000011' },
+        { title: '好餓的毛毛蟲', author: '', language: 'zh', isbn: '9780000000028' },
+      ],
+      { childId: 'k2', mode: 'mom' },
+    ),
+  );
+  expect(result.current.activeChild?.id).toBe('k2');
+  expect(result.current.allLogs).toHaveLength(2);
+  expect(result.current.allLogs.every((l) => l.childId === 'k2' && l.mode === 'mom' && l.times === 1)).toBe(true);
+  expect(reads(result.current.logs)).toBe(2);
+  await flush();
+  expect(mockDb.tables.logs.size).toBe(2);
+  expect(mockDb.tables.books.size).toBe(2);
+});

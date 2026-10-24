@@ -8,6 +8,7 @@ import { newestFirst, toDayKey } from './dates';
 import type { ImportPlan } from './importer';
 import {
   allRows,
+  bookFinder,
   diffStates,
   EMPTY_STATE,
   findSameBook,
@@ -55,6 +56,11 @@ type Store = {
    * A book the family doesn't have yet is added to the family shelf first.
    */
   checkIn: (input: { book: NewBook; childId: string; mode: ReadingMode; times: number; date?: string }) => void;
+  /**
+   * Adds a pile of scanned books to the family shelf at once; books the family has are not added twice.
+   * With `read`, each book is also checked in once for that child.
+   */
+  addBooks: (books: NewBook[], read?: { childId: string; mode: ReadingMode; date?: string }) => void;
   applyImport: (plan: ImportPlan) => void;
   undoImport: (id: string) => void;
   /** Adds back what a backup file has and the app doesn't. */
@@ -358,6 +364,40 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
             ? s.books.map((b) => (b.id === same.id ? library : b))
             : [library, ...s.books];
         return addReadsToday({ ...s, books, activeChildId: childId }, childId, library.id, mode, times, date);
+      }),
+    addBooks: (newBooks, read) =>
+      setState((s) => {
+        if (read && !s.children.some((c) => c.id === read.childId)) return s;
+        const finder = bookFinder(s.books);
+        // Family books given a cover they lacked, and new ones; the rest of the library is left as it is.
+        const changed = new Map<string, LibraryBook>();
+        const added: LibraryBook[] = [];
+        const ids: string[] = [];
+        for (const book of newBooks) {
+          const found = finder.find(book);
+          if (!found) {
+            const created: LibraryBook = { ...book, id: newId(), addedAt: new Date().toISOString() };
+            added.unshift(created);
+            finder.add(created);
+            ids.push(created.id);
+            continue;
+          }
+          const same = changed.get(found.id) ?? added.find((b) => b.id === found.id) ?? found;
+          if (!same.coverUrl && book.coverUrl) {
+            const filled = { ...same, coverUrl: book.coverUrl };
+            const i = added.indexOf(same);
+            if (i >= 0) added[i] = filled;
+            else changed.set(same.id, filled);
+          }
+          ids.push(same.id);
+        }
+        const books = [...added, ...(changed.size ? s.books.map((b) => changed.get(b.id) ?? b) : s.books)];
+        let next: State = { ...s, books };
+        if (read) {
+          next.activeChildId = read.childId;
+          for (const id of new Set(ids)) next = addReadsToday(next, read.childId, id, read.mode, 1, read.date);
+        }
+        return next;
       }),
     applyImport: (plan) =>
       setState((s) => {

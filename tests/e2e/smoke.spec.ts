@@ -268,3 +268,37 @@ test('the bookshelf is one family shelf: a book added once is there for every ch
   await expect(shown(page, '小美 1 次').first()).toBeVisible();
   await expect(shown(page, '讀過 1').first()).toBeVisible();
 });
+
+test('many books at once: a pile of barcodes is added to the shelf and checked in for one child', async ({ page }) => {
+  await addChild(page, '小明');
+  await addChild(page, '小美');
+  await tab(page, '書架');
+  await button(page, '＋ 加一本書').click();
+  await page.getByPlaceholder('ISBN 或條碼數字').fill('9786660000000');
+  await page.getByPlaceholder('書名').fill('書架上的書');
+  await button(page, '加入全家書架').click();
+  await button(page, '收起').click();
+
+  // The camera can't run here, so the barcodes are typed in; scanned ones go to the same list.
+  await button(page, '一次掃很多本').click();
+  const code = page.getByPlaceholder('條碼數字', { exact: true });
+  for (const c of ['9786660000000', '9786660000017', '9786660000024', '9786660000017']) {
+    await code.fill(c);
+    await button(page, '加入清單').click();
+  }
+  await expect(shown(page, '已掃 3 本').first()).toBeVisible();
+  await expect(shown(page, '已在全家書架上').first()).toBeVisible();
+  await expect(shown(page, '查不到，請輸入書名（條碼 9786660000017）').first()).toBeVisible();
+  // Lookups are cut off, so the two new barcodes need titles (newest scan first); one is left blank and is skipped.
+  await page.getByPlaceholder('書名', { exact: true }).filter({ visible: true }).nth(1).fill('新來的書');
+  await expect(button(page, '加入全家書架（2 本）')).toBeVisible();
+  await page.getByText(/小美$/).filter({ visible: true }).last().click();
+  await button(page, '一起看').click();
+  await button(page, '幫小美打卡 2 本').click();
+  await expect(shown(page, '已幫小美記上 2 本一起看，新書也加進全家書架了。1 本沒有書名或重複，沒有加入。').first()).toBeVisible();
+
+  await button(page, '清單').click();
+  await expect(shown(page, '全部 2').first()).toBeVisible();
+  await expect(shown(page, '新來的書').first()).toBeVisible();
+  await expect(shown(page, '小美 1 次').first()).toBeVisible();
+});

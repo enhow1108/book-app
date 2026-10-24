@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { BatchScan } from '@/components/batch-scan';
 import { BookCover } from '@/components/book-cover';
 import { Button, Field } from '@/components/form';
 import { dayLabel } from '@/components/day-picker';
@@ -36,6 +37,7 @@ export function ScanCheckin({ date }: { date?: string }) {
   const [mode, setMode] = useState<ReadingMode>('self');
   const [times, setTimes] = useState(1);
   const [done, setDone] = useState<string>();
+  const [batch, setBatch] = useState(false);
 
   const who = children.find((c) => c.id === childId) ?? activeChild;
   const known = book && library.find((b) => (b.isbn && b.isbn === book.isbn) || b.title === book.title);
@@ -151,8 +153,9 @@ export function ScanCheckin({ date }: { date?: string }) {
         )
       ) : null}
       {notFound !== 'typed' ? (
-        <View style={styles.row}>
+        <View style={styles.chips}>
           <Button title="沒有條碼，自己輸入書名" onPress={onType} />
+          {!batch ? <Button title="一次掃很多本" onPress={() => setBatch(true)} /> : null}
         </View>
       ) : null}
       {done && !book ? (
@@ -243,6 +246,7 @@ export function ScanCheckin({ date }: { date?: string }) {
           </View>
         </>
       ) : null}
+      {batch ? <BatchScan date={date} onClose={() => setBatch(false)} /> : null}
       {scanning ? <IsbnScanner onScanned={onScanned} onClose={() => setScanning(false)} /> : null}
     </ThemedView>
   );

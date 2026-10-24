@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AddBookForm } from '@/components/add-book-form';
+import { BatchScan } from '@/components/batch-scan';
 import { BookCover } from '@/components/book-cover';
 import { BookDetail } from '@/components/book-detail';
 import { Button, Field } from '@/components/form';
@@ -40,6 +41,7 @@ const SORTS: { value: Sort; label: string }[] = [
 export default function BookshelfScreen() {
   const { children, books, allLogs, library } = useStore();
   const [adding, setAdding] = useState(false);
+  const [batch, setBatch] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<Sort>('recent');
   const [view, setView] = useState<ShelfView>('shelf');
@@ -95,10 +97,14 @@ export default function BookshelfScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.header}>
             <ThemedText type="subtitle">全家的書架</ThemedText>
-            {!adding ? <Button title="＋ 加一本書" onPress={() => setAdding(true)} /> : null}
+            <View style={styles.chips}>
+              {!adding ? <Button title="＋ 加一本書" onPress={() => setAdding(true)} /> : null}
+              {!batch ? <Button title="一次掃很多本" onPress={() => setBatch(true)} /> : null}
+            </View>
           </View>
 
           {adding ? <AddBookForm onClose={() => setAdding(false)} /> : null}
+          {batch ? <BatchScan onClose={() => setBatch(false)} /> : null}
 
           {books.length > 0 ? (
             <View style={styles.stats}>
