@@ -267,6 +267,15 @@ test('the bookshelf is one family shelf: a book added once is there for every ch
   await tab(page, '書架');
   await expect(shown(page, '小美 1 次').first()).toBeVisible();
   await expect(shown(page, '讀過 1').first()).toBeVisible();
+
+  // From the book page, add a read for the other child on another day.
+  await shown(page, '大家的書').first().click();
+  await button(page, '🐛 小明').click();
+  await button(page, '‹ 前一天').click();
+  await button(page, '媽媽唸').click();
+  await button(page, '+1 次').click();
+  await expect(shown(page, '小明昨天讀了 1 次 · 一共 1 次').first()).toBeVisible();
+  await expect(shown(page, /小明 · 媽媽唸 · 1 次/).first()).toBeVisible();
 });
 
 test('many books at once: a pile of barcodes is added to the shelf and checked in for one child', async ({ page }) => {

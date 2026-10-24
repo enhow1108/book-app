@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BookCover } from '@/components/book-cover';
+import { DayPicker, dayLabel } from '@/components/day-picker';
 import { confirmDestructive } from '@/components/dialogs';
 import { LogEditor } from '@/components/log-editor';
 import { Button } from '@/components/form';
@@ -28,15 +29,21 @@ function shortDate(day: string, full = false) {
 
 /** Full-screen page for one book: its cover, reading status, read counts and removal. */
 export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () => void }) {
-  const { activeChild, children, books, logs, allLogs, state, updateBook, removeBook, changeReadsToday } = useStore();
+  const { activeChild, children, books, logs, allLogs, state, updateBook, removeBook, changeReadsToday, setActiveChild } =
+    useStore();
   const [mode, setMode] = useState<ReadingMode>('self');
   const [showAll, setShowAll] = useState(false);
   const [editingLogId, setEditingLogId] = useState<string>();
+  // The day the +1 / − buttons add to or take from; today unless another day is picked.
+  const [day, setDay] = useState(() => toDayKey(new Date()));
   const book = books.find((b) => b.id === bookId);
   if (!book) return null;
 
   const bookLogs = logs.filter((l) => l.bookId === book.id);
-  const today = readCount(bookLogs.filter((l) => l.date === toDayKey(new Date())));
+  const dayLogs = bookLogs.filter((l) => l.date === day);
+  const onDay = readCount(dayLogs);
+  // − only takes back quick reads; imported or noted records are fixed from the list below.
+  const canUndo = dayLogs.some((l) => !l.note && !l.importId && !l.minutes);
   const total = readCount(bookLogs);
   const byMode = READING_MODES.map((m) => ({
     ...m,
@@ -110,8 +117,22 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
             </View>
 
             <ThemedView type="backgroundElement" style={styles.card}>
+              {children.length > 1 ? (
+                <View style={styles.row}>
+                  {children.map((c) => (
+                    <Button
+                      key={c.id}
+                      title={`${c.avatar} ${c.name}`}
+                      selected={c.id === activeChild?.id}
+                      onPress={() => setActiveChild(c.id)}
+                    />
+                  ))}
+                </View>
+              ) : null}
+              <DayPicker day={day} onChange={setDay} />
               <ThemedText type="smallBold">
-                今天讀了 {today} 次 · 一共 {total} 次
+                {activeChild?.name}
+                {dayLabel(day)}讀了 {onDay} 次 · 一共 {total} 次
               </ThemedText>
               {byMode.length ? (
                 <ThemedText type="small" themeColor="textSecondary">
@@ -124,14 +145,17 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
                 ))}
               </View>
               <View style={styles.row}>
-                {today > 0 ? <Button title="−" onPress={() => changeReadsToday(book.id, -1, mode)} /> : null}
-                <Button title="+1 次" onPress={() => changeReadsToday(book.id, 1, mode)} />
+                {canUndo ? <Button title="−" onPress={() => changeReadsToday(book.id, -1, mode, day)} /> : null}
+                <Button title="+1 次" onPress={() => changeReadsToday(book.id, 1, mode, day)} />
               </View>
             </ThemedView>
 
             {familyLogs.length ? (
               <ThemedView type="backgroundElement" style={[styles.card, styles.history]}>
                 <ThemedText type="smallBold">閱讀紀錄</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  點一筆可以改日期、孩子、怎麼讀和次數，或刪除。
+                </ThemedText>
                 {shownLogs.map((l) => (
                   <Pressable key={l.id} style={styles.historyRow} onPress={() => setEditingLogId(l.id)}>
                     <ThemedText type="small" style={styles.historyDate}>
