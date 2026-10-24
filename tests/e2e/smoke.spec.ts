@@ -48,13 +48,18 @@ test('add a child, a book and a read; it is all still there after a reload', asy
   await expect(shown(page, /查不到這本書/).first()).toBeVisible();
   await page.getByPlaceholder('書名').fill('測試的書');
   await page.getByPlaceholder('作者').fill('測試作者');
-  await button(page, '加入書架').click();
+  await button(page, '加入全家書架').click();
   await expect(shown(page, '測試的書').first()).toBeVisible();
 
+  // A book on the family shelf comes onto a child's list once they read it.
   await tab(page, '打卡');
+  await button(page, '沒有條碼，自己輸入書名').click();
+  await page.getByPlaceholder('書名').first().fill('測試的書');
+  await button(page, '媽媽唸').click();
+  await button(page, '打卡').click();
+  await expect(shown(page, '已幫小明記上「測試的書」媽媽唸 1 次。').first()).toBeVisible();
   await expect(shown(page, '小明最近讀的書').first()).toBeVisible();
   await button(page, '媽媽唸').click();
-  await button(page, '媽媽唸 +1').click();
   await button(page, '媽媽唸 +1').click();
   await expect(shown(page, '今天 2 次 · 共 2 次').first()).toBeVisible();
   await button(page, '−').click();
@@ -236,4 +241,29 @@ test('check-in lists only the picked child\'s books, and the day\'s records foll
   await button(page, '‹ 前一天').click();
   await expect(shown(page, '昨天的紀錄').first()).toBeVisible();
   await expect(shown(page, '點一下修改')).toHaveCount(0);
+});
+
+test('the bookshelf is one family shelf: a book added once is there for every child', async ({ page }) => {
+  await addChild(page, '小明');
+  await addChild(page, '小美');
+  await tab(page, '書架');
+  await expect(shown(page, '全家的書架').first()).toBeVisible();
+  await button(page, '＋ 加一本書').click();
+  await page.getByPlaceholder('書名').fill('大家的書');
+  await button(page, '加入全家書架').click();
+  await button(page, '收起').click();
+  await button(page, '清單').click();
+  await expect(shown(page, '還沒有人讀過').first()).toBeVisible();
+  await expect(shown(page, '還沒讀 1').first()).toBeVisible();
+
+  // Either child can check it in straight away, and the shelf shows who read it.
+  await tab(page, '打卡');
+  await button(page, '沒有條碼，自己輸入書名').click();
+  await page.getByPlaceholder('書名').first().fill('大家的書');
+  await button(page, '🐛 小美').click();
+  await button(page, '打卡').click();
+  await expect(shown(page, '已幫小美記上「大家的書」自己看 1 次。').first()).toBeVisible();
+  await tab(page, '書架');
+  await expect(shown(page, '小美 1 次').first()).toBeVisible();
+  await expect(shown(page, '讀過 1').first()).toBeVisible();
 });

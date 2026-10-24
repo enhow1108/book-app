@@ -282,20 +282,18 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
     addBook: ({ status, ...book }) =>
       setState((s) => {
         const childId = s.activeChildId;
-        if (!childId) return s;
         const addedAt = new Date().toISOString();
-        // A book a sibling already has is shared rather than added twice.
+        // A book the family already has is shared rather than added twice.
         const same = findSameBook(s.books, book);
         const library: LibraryBook = same
           ? { ...same, coverUrl: same.coverUrl ?? book.coverUrl, author: same.author || book.author }
           : { ...book, id: newId(), addedAt };
+        const books = same ? s.books.map((b) => (b.id === same.id ? library : b)) : [library, ...s.books];
+        // Without a status the book only joins the family shelf; a child's own shelf gets it when they read it.
+        if (!status || !childId) return { ...s, books };
         const id = shelfId(childId, library.id);
-        if (s.shelf.some((e) => e.id === id)) return s;
-        return {
-          ...s,
-          books: same ? s.books.map((b) => (b.id === same.id ? library : b)) : [library, ...s.books],
-          shelf: [{ id, childId, bookId: library.id, status, addedAt }, ...s.shelf],
-        };
+        if (s.shelf.some((e) => e.id === id)) return { ...s, books };
+        return { ...s, books, shelf: [{ id, childId, bookId: library.id, status, addedAt }, ...s.shelf] };
       }),
     updateBook: (id, { status, addedAt: _addedAt, ...patch }) =>
       setState((s) => {

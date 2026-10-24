@@ -12,18 +12,16 @@ import { pickCoverPhoto } from '@/data/cover-photo';
 import { findGoogleCover, lookupIsbn } from '@/data/isbn';
 import { LANGUAGES } from '@/data/language';
 import { isbnKey } from '@/data/library';
-import { STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
-import type { BookLanguage, BookStatus } from '@/data/types';
+import type { BookLanguage } from '@/data/types';
 
 /** Add a book by scanning or typing its ISBN (or other barcode), or by entering the title by hand. */
 export function AddBookForm({ onClose }: { onClose: () => void }) {
-  const { activeChild, addBook, library } = useStore();
+  const { addBook, library } = useStore();
   const [isbn, setIsbn] = useState('');
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [language, setLanguage] = useState<BookLanguage>('zh');
-  const [status, setStatus] = useState<BookStatus>('reading');
   const [coverUrl, setCoverUrl] = useState<string>();
   const [looking, setLooking] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -72,7 +70,7 @@ export function AddBookForm({ onClose }: { onClose: () => void }) {
   }
 
   function onAdd() {
-    addBook({ title: title.trim(), author: author.trim(), language, status, isbn: isbn || undefined, coverUrl });
+    addBook({ title: title.trim(), author: author.trim(), language, isbn: isbn || undefined, coverUrl });
     setIsbn('');
     setTitle('');
     setAuthor('');
@@ -126,12 +124,7 @@ export function AddBookForm({ onClose }: { onClose: () => void }) {
           <Button key={l.value} title={l.label} selected={language === l.value} onPress={() => setLanguage(l.value)} />
         ))}
       </View>
-      <View style={styles.row}>
-        {STATUSES.map((s) => (
-          <Button key={s.value} title={s.label} selected={status === s.value} onPress={() => setStatus(s.value)} />
-        ))}
-      </View>
-      <Button title="加入書架" onPress={onAdd} disabled={!title.trim() || !activeChild} />
+      <Button title="加入全家書架" onPress={onAdd} disabled={!title.trim()} />
       {scanning ? <IsbnScanner onScanned={onScanned} onClose={() => setScanning(false)} /> : null}
     </ThemedView>
   );

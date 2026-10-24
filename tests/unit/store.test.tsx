@@ -79,6 +79,17 @@ test('a book a sibling already has is shared, not added twice', async () => {
   ]);
 });
 
+test('a book added without a status joins the family shelf only, for every child', async () => {
+  const { result } = await openStore(twoKids);
+  await act(() => result.current.addBook({ title: 'Ours', author: '', language: 'zh' }));
+  expect(result.current.library.map((b) => b.title)).toEqual(['Ours']);
+  expect(result.current.state.shelf).toEqual([]);
+  await act(() => result.current.setActiveChild('k2'));
+  expect(result.current.books).toMatchObject([{ title: 'Ours', shelved: false }]);
+  await flush();
+  expect([...mockDb.tables.books.values()]).toHaveLength(1);
+});
+
 test('+1 / −1 reads today share one log per reading mode', async () => {
   const seed = { ...twoKids, books: [book('a', 'A')] };
   const { result } = await openStore(seed);

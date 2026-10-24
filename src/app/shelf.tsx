@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddBookForm } from '@/components/add-book-form';
 import { BookCover } from '@/components/book-cover';
 import { BookDetail } from '@/components/book-detail';
-import { ChildSwitcher } from '@/components/child-switcher';
 import { Button, Field } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -14,16 +13,13 @@ import { WoodShelf } from '@/components/wood-shelf';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { newestFirst, readCount, recentBooks } from '@/data/dates';
 import { bookStats } from '@/data/history';
-import { STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
-import { useChildTint } from '@/hooks/use-child-tint';
-import type { Book, BookStatus } from '@/data/types';
 
 /** Books drawn at a time; imported libraries can hold thousands. */
 const PAGE = 60;
 
-// Books only a sibling has on their shelf so far count as not yet read by this child.
-const statusOf = (b: Book): BookStatus | 'unread' => (b.shelved ? (b.status ?? 'reading') : 'unread');
+// The shelf is the whole family's: one list for everyone, sorted and filtered by everyone's reading.
+type Filter = 'all' | 'read' | 'unread';
 
 type ShelfView = 'shelf' | 'list' | 'calendar';
 const VIEWS: { value: ShelfView; label: string }[] = [
@@ -40,69 +36,76 @@ const SORTS: { value: Sort; label: string }[] = [
 ];
 
 export default function BookshelfScreen() {
-  const tint = useChildTint();
-  const { activeChild, books, logs, library } = useStore();
+  const { children, books, allLogs, library } = useStore();
   const [adding, setAdding] = useState(false);
-  const [filter, setFilter] = useState<BookStatus | 'unread' | 'all'>('all');
+  const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<Sort>('recent');
   const [view, setView] = useState<ShelfView>('shelf');
   const [search, setSearch] = useState('');
   const [openBookId, setOpenBookId] = useState<string>();
   const [limit, setLimit] = useState(PAGE);
 
-  const stats = useMemo(() => bookStats(logs), [logs]);
-  const readsOf = (id: string) => stats.get(id)?.times ?? 0;
+  const stats = useMemo(() => bookStats(allLogs), [allLogs]);
   const query = search.trim().toLowerCase();
 
   // Sorting and counting thousands of books is kept out of renders that don't change them.
   const sorted = useMemo(
     () =>
       sort === 'recent'
-        ? recentBooks(books, logs)
+        ? recentBooks(books, allLogs)
         : sort === 'added'
           ? [...books].sort((a, b) => newestFirst(a.addedAt, b.addedAt))
           : [...books].sort((a, b) => (stats.get(b.id)?.times ?? 0) - (stats.get(a.id)?.times ?? 0)),
-    [sort, books, logs, stats],
+    [sort, books, allLogs, stats],
   );
   const shown = useMemo(
     () =>
       sorted.filter(
         (b) =>
-          (filter === 'all' || statusOf(b) === filter) &&
+          (filter === 'all' || (filter === 'read') === stats.has(b.id)) &&
           (!query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query)),
       ),
-    [sorted, filter, query],
+    [sorted, filter, query, stats],
   );
-  const counts = useMemo(() => {
-    const n = { want: 0, reading: 0, done: 0, unread: 0 };
-    for (const b of books) n[statusOf(b)]++;
-    return n;
-  }, [books]);
-  const count = (status: BookStatus | 'unread') => counts[status];
+  const readBooks = useMemo(() => books.filter((b) => stats.has(b.id)).length, [books, stats]);
+  // Who read each book, for the list view: 心譯 3 次 · 心瀚 1 次.
+  const readers = useMemo(() => {
+    const names = new Map(children.map((c) => [c.id, c.name]));
+    const byBook = new Map<string, Map<string, number>>();
+    for (const l of allLogs) {
+      const name = names.get(l.childId);
+      if (!name) continue;
+      const counts = byBook.get(l.bookId) ?? new Map<string, number>();
+      counts.set(name, (counts.get(name) ?? 0) + (l.times ?? 1));
+      byBook.set(l.bookId, counts);
+    }
+    return byBook;
+  }, [allLogs, children]);
+  const readersOf = (id: string) =>
+    [...(readers.get(id) ?? [])].map(([name, times]) => `${name} ${times} 次`).join(' · ') || '還沒有人讀過';
 
   return (
-    <ThemedView style={[styles.container, tint && { backgroundColor: tint }]}>
+    <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.header}>
             <ThemedText type="subtitle">全家的書架</ThemedText>
-            {!adding && activeChild ? <Button title="＋ 加一本書" onPress={() => setAdding(true)} /> : null}
+            {!adding ? <Button title="＋ 加一本書" onPress={() => setAdding(true)} /> : null}
           </View>
-          <ChildSwitcher />
 
           {adding ? <AddBookForm onClose={() => setAdding(false)} /> : null}
 
           {books.length > 0 ? (
             <View style={styles.stats}>
               <Stat value={books.length} label="本書" />
-              <Stat value={count('done')} label={activeChild ? `${activeChild.name}讀完` : '本讀完了'} />
-              <Stat value={readCount(logs)} label="次閱讀" />
+              <Stat value={readBooks} label="本讀過" />
+              <Stat value={readCount(allLogs)} label="次閱讀" />
             </View>
           ) : null}
 
           {books.length === 0 ? (
             <ThemedText themeColor="textSecondary">
-              {activeChild ? '書架還是空的，按「＋ 加一本書」開始吧。' : ''}
+              書架還是空的，按「＋ 加一本書」開始吧。
             </ThemedText>
           ) : (
             <>
@@ -112,7 +115,7 @@ export default function BookshelfScreen() {
                 ))}
               </View>
               {view === 'calendar' ? (
-                <ReadingCalendar logs={logs} library={library} onOpenBook={setOpenBookId} />
+                <ReadingCalendar logs={allLogs} library={library} onOpenBook={setOpenBookId} />
               ) : (
                 <>
                   <View style={styles.chips}>
@@ -121,21 +124,16 @@ export default function BookshelfScreen() {
                       selected={filter === 'all'}
                       onPress={() => setFilter('all')}
                     />
-                    {STATUSES.map((s) => (
-                      <Button
-                        key={s.value}
-                        title={`${s.label} ${count(s.value)}`}
-                        selected={filter === s.value}
-                        onPress={() => setFilter(s.value)}
-                      />
-                    ))}
-                    {count('unread') > 0 ? (
-                      <Button
-                        title={`還沒讀 ${count('unread')}`}
-                        selected={filter === 'unread'}
-                        onPress={() => setFilter('unread')}
-                      />
-                    ) : null}
+                    <Button
+                      title={`讀過 ${readBooks}`}
+                      selected={filter === 'read'}
+                      onPress={() => setFilter('read')}
+                    />
+                    <Button
+                      title={`還沒讀 ${books.length - readBooks}`}
+                      selected={filter === 'unread'}
+                      onPress={() => setFilter('unread')}
+                    />
                   </View>
                   <View style={styles.toolbar}>
                     <View style={styles.chips}>
@@ -167,13 +165,7 @@ export default function BookshelfScreen() {
                               {book.title}
                             </ThemedText>
                             <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                              {[
-                                book.author,
-                                STATUSES.find((s) => s.value === statusOf(book))?.label,
-                                `${readsOf(book.id)} 次`,
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')}
+                              {[book.author, readersOf(book.id)].filter(Boolean).join(' · ')}
                             </ThemedText>
                           </View>
                         </ThemedView>
