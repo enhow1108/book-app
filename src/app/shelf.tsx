@@ -39,7 +39,7 @@ const SORTS: { value: Sort; label: string }[] = [
 ];
 
 export default function BookshelfScreen() {
-  const { children, books, allLogs, library } = useStore();
+  const { children, books, allLogs, library, state } = useStore();
   const [adding, setAdding] = useState(false);
   const [batch, setBatch] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
@@ -50,6 +50,13 @@ export default function BookshelfScreen() {
   const [limit, setLimit] = useState(PAGE);
 
   const stats = useMemo(() => bookStats(allLogs), [allLogs]);
+  // Children marked 讀完了 on a book without a dated read still count as having read it.
+  const finished = useMemo(() => {
+    const byBook = new Map<string, string[]>();
+    for (const e of state.shelf) if (e.status === 'done') byBook.set(e.bookId, [...(byBook.get(e.bookId) ?? []), e.childId]);
+    return byBook;
+  }, [state.shelf]);
+  const isRead = (id: string) => stats.has(id) || finished.has(id);
   const query = searchKey(search);
 
   // Sorting and counting thousands of books is kept out of renders that don't change them.
@@ -70,11 +77,11 @@ export default function BookshelfScreen() {
       sorted.filter((b) =>
         query
           ? searchKey(`${b.title} ${b.author} ${b.isbn ?? ''}`).includes(query)
-          : filter === 'all' || (filter === 'read') === stats.has(b.id),
+          : filter === 'all' || (filter === 'read') === isRead(b.id),
       ),
-    [sorted, filter, query, stats],
+    [sorted, filter, query, stats, finished],
   );
-  const readBooks = useMemo(() => books.filter((b) => stats.has(b.id)).length, [books, stats]);
+  const readBooks = useMemo(() => books.filter((b) => isRead(b.id)).length, [books, stats, finished]);
   // Who read each book, for the list view: 心譯 3 次 · 心瀚 1 次.
   const readers = useMemo(() => {
     const names = new Map(children.map((c) => [c.id, c.name]));
@@ -88,8 +95,15 @@ export default function BookshelfScreen() {
     }
     return byBook;
   }, [allLogs, children]);
-  const readersOf = (id: string) =>
-    [...(readers.get(id) ?? [])].map(([name, times]) => `${name} ${times} 次`).join(' · ') || '還沒有人讀過';
+  const readersOf = (id: string) => {
+    const counts = readers.get(id);
+    const names = new Map(children.map((c) => [c.id, c.name]));
+    const done = (finished.get(id) ?? []).map((c) => names.get(c)).filter((n): n is string => !!n && !counts?.has(n));
+    return (
+      [...(counts ?? [])].map(([name, times]) => `${name} ${times} 次`).concat(done.map((n) => `${n} 讀完了`)).join(' · ') ||
+      '還沒有人讀過'
+    );
+  };
 
   return (
     <ThemedView style={styles.container}>

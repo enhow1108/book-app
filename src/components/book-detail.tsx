@@ -98,9 +98,13 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
               </ThemedText>
               {family.length > 1
                 ? family.map((f) => (
-                    <ThemedText key={f.id} type="small" themeColor="textSecondary">
-                      {f.reads ? `${f.name}讀過 ${f.reads} 次，最近一次 ${shortDate(f.last!)}` : `${f.name}還沒讀`}
-                    </ThemedText>
+                    <Pressable key={f.id} onPress={() => setActiveChild(f.id)} accessibilityRole="button">
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {f.reads
+                          ? `${f.name}讀過 ${f.reads} 次，最近一次 ${shortDate(f.last!)}`
+                          : `${f.name}還沒有閱讀紀錄，可以在下面幫${f.name}記一筆`}
+                      </ThemedText>
+                    </Pressable>
                   ))
                 : null}
             </View>
@@ -117,6 +121,11 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
             </View>
 
             <ThemedView type="backgroundElement" style={styles.card}>
+              {children.length > 1 ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  幫誰記一筆？
+                </ThemedText>
+              ) : null}
               {children.length > 1 ? (
                 <View style={styles.row}>
                   {children.map((c) => (

@@ -234,7 +234,7 @@ test('check-in lists only the picked child\'s books, and the day\'s records foll
 
   // 小美 hasn't read it, so it isn't in her list even though it's on the family shelf.
   await shown(page, '小美').first().click();
-  await expect(shown(page, '小美這天還沒有紀錄。可以用上面的「‹ 前一天」「後一天 ›」看別天。').first()).toBeVisible();
+  await expect(shown(page, '小美這天還沒有紀錄。可以用上面的「‹ 前一天」「後一天 ›」或「📅 選日期」看別天。').first()).toBeVisible();
   await expect(shown(page, '哥哥的書')).toHaveCount(0);
 
   await shown(page, '小明').first().click();
@@ -270,12 +270,24 @@ test('the bookshelf is one family shelf: a book added once is there for every ch
 
   // From the book page, add a read for the other child on another day.
   await shown(page, '大家的書').first().click();
+  await expect(shown(page, '小明還沒有閱讀紀錄，可以在下面幫小明記一筆').first()).toBeVisible();
   await button(page, '🐛 小明').click();
   await button(page, '‹ 前一天').click();
   await button(page, '媽媽唸').click();
   await button(page, '+1 次').click();
   await expect(shown(page, '小明昨天讀了 1 次 · 一共 1 次').first()).toBeVisible();
   await expect(shown(page, /小明 · 媽媽唸 · 1 次/).first()).toBeVisible();
+  await button(page, '關閉').click();
+  await expect(shown(page, /小明 1 次/).first()).toBeVisible();
+
+  // Or pick the day from the calendar: the 15th of last month.
+  await shown(page, '大家的書').first().click();
+  await button(page, '📅 選日期').click();
+  await button(page, '‹').click();
+  const last = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 15);
+  await page.getByLabel(`選 ${last.getMonth() + 1} 月 15 日`).first().click();
+  await button(page, '+1 次').click();
+  await expect(shown(page, new RegExp(`小明.*${last.getMonth() + 1} 月 15 日.*讀了 1 次 · 一共 2 次`)).first()).toBeVisible();
 });
 
 test('many books at once: a pile of barcodes is added to the shelf and checked in for one child', async ({ page }) => {

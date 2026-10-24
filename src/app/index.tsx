@@ -107,7 +107,7 @@ export default function CheckinScreen() {
               <ThemedText type="smallBold">{dayLabel(day)}的紀錄</ThemedText>
               {dayLogs.length === 0 ? (
                 <ThemedText type="small" themeColor="textSecondary">
-                  {`${activeChild.name}這天還沒有紀錄。可以用上面的「‹ 前一天」「後一天 ›」看別天。`}
+                  {`${activeChild.name}這天還沒有紀錄。可以用上面的「‹ 前一天」「後一天 ›」或「📅 選日期」看別天。`}
                 </ThemedText>
               ) : null}
               {dayLogs.map((log) => (
