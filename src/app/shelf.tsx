@@ -13,6 +13,7 @@ import { WoodShelf } from '@/components/wood-shelf';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { newestFirst, readCount, recentBooks } from '@/data/dates';
 import { bookStats } from '@/data/history';
+import { byTitle, searchKey } from '@/data/search';
 import { useStore } from '@/data/store';
 
 /** Books drawn at a time; imported libraries can hold thousands. */
@@ -28,8 +29,9 @@ const VIEWS: { value: ShelfView; label: string }[] = [
   { value: 'calendar', label: '月曆' },
 ];
 
-type Sort = 'recent' | 'added' | 'most';
+type Sort = 'all' | 'recent' | 'added' | 'most';
 const SORTS: { value: Sort; label: string }[] = [
+  { value: 'all', label: '全部' },
   { value: 'recent', label: '最近讀的' },
   { value: 'added', label: '最新加入' },
   { value: 'most', label: '讀最多次' },
@@ -46,24 +48,27 @@ export default function BookshelfScreen() {
   const [limit, setLimit] = useState(PAGE);
 
   const stats = useMemo(() => bookStats(allLogs), [allLogs]);
-  const query = search.trim().toLowerCase();
+  const query = searchKey(search);
 
   // Sorting and counting thousands of books is kept out of renders that don't change them.
   const sorted = useMemo(
     () =>
-      sort === 'recent'
+      sort === 'all'
+        ? [...books].sort(byTitle)
+        : sort === 'recent'
         ? recentBooks(books, allLogs)
         : sort === 'added'
           ? [...books].sort((a, b) => newestFirst(a.addedAt, b.addedAt))
           : [...books].sort((a, b) => (stats.get(b.id)?.times ?? 0) - (stats.get(a.id)?.times ?? 0)),
     [sort, books, allLogs, stats],
   );
+  // A search looks through every family book, whichever of 讀過 / 還沒讀 is picked.
   const shown = useMemo(
     () =>
-      sorted.filter(
-        (b) =>
-          (filter === 'all' || (filter === 'read') === stats.has(b.id)) &&
-          (!query || b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query)),
+      sorted.filter((b) =>
+        query
+          ? searchKey(`${b.title} ${b.author} ${b.isbn ?? ''}`).includes(query)
+          : filter === 'all' || (filter === 'read') === stats.has(b.id),
       ),
     [sorted, filter, query, stats],
   );
@@ -151,6 +156,11 @@ export default function BookshelfScreen() {
                     <Field placeholder="找書名或作者" value={search} onChangeText={setSearch} />
                   ) : null}
 
+                  {query ? (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      在全部 {books.length} 本書裡找到 {shown.length} 本
+                    </ThemedText>
+                  ) : null}
                   {shown.length === 0 ? (
                     <ThemedText themeColor="textSecondary">這裡還沒有書。</ThemedText>
                   ) : view === 'shelf' ? (
