@@ -46,7 +46,7 @@ test('add a child, a book and a read; it is all still there after a reload', asy
   await page.getByPlaceholder('ISBN 或條碼數字').fill('9786660000000');
   await button(page, '查詢').click();
   await expect(shown(page, /查不到這本書/).first()).toBeVisible();
-  await page.getByPlaceholder('書名').fill('測試的書');
+  await page.getByPlaceholder('書名', { exact: true }).fill('測試的書');
   await page.getByPlaceholder('作者').fill('測試作者');
   await button(page, '加入全家書架').click();
   await expect(shown(page, '測試的書').first()).toBeVisible();
@@ -54,7 +54,7 @@ test('add a child, a book and a read; it is all still there after a reload', asy
   // A book on the family shelf comes onto a child's list once they read it.
   await tab(page, '打卡');
   await button(page, '沒有條碼，自己輸入書名').click();
-  await page.getByPlaceholder('書名').first().fill('測試的書');
+  await page.getByPlaceholder('書名', { exact: true }).first().fill('測試的書');
   await button(page, '媽媽唸').click();
   await button(page, '打卡').click();
   await expect(shown(page, '已幫小明記上「測試的書」媽媽唸 1 次。').first()).toBeVisible();
@@ -133,10 +133,10 @@ test('scan check-in: a new book is logged for the chosen child and joins the fam
   await tab(page, '打卡');
   await expect(shown(page, '掃描打卡').first()).toBeVisible();
   // A made-up ISBN: lookups are cut off, so the title is typed in.
-  await page.getByPlaceholder('ISBN 或條碼數字').first().fill('9786660000000');
+  await page.getByPlaceholder('ISBN、條碼或書名').first().fill('9786660000000');
   await button(page, '查詢').click();
   await expect(shown(page, /查不到這本書/).first()).toBeVisible();
-  await page.getByPlaceholder('書名').first().fill('掃描的書');
+  await page.getByPlaceholder('書名', { exact: true }).first().fill('掃描的書');
   await button(page, '🐛 小美').click();
   await button(page, '一起看').click();
   await button(page, '＋').click();
@@ -153,14 +153,14 @@ test('a Japanese magazine barcode (no ISBN) is checked in by hand, and found aga
   await addChild(page, '小明');
   await tab(page, '打卡');
   // A made-up 491 magazine code with a valid check digit.
-  await page.getByPlaceholder('ISBN 或條碼數字').first().fill('4910123450650');
+  await page.getByPlaceholder('ISBN、條碼或書名').first().fill('4910123450650');
   await button(page, '查詢').click();
   await expect(shown(page, /這是雜誌或商品條碼/).first()).toBeVisible();
-  await page.getByPlaceholder('書名').first().fill('くまのえほん');
+  await page.getByPlaceholder('書名', { exact: true }).first().fill('くまのえほん');
   await button(page, '打卡').click();
   await expect(shown(page, /已幫小明記上「くまのえほん」/).first()).toBeVisible();
 
-  await page.getByPlaceholder('ISBN 或條碼數字').first().fill('4910123450650');
+  await page.getByPlaceholder('ISBN、條碼或書名').first().fill('4910123450650');
   await button(page, '查詢').click();
   await expect(shown(page, '已在全家書架上').first()).toBeVisible();
   await expect(shown(page, 'くまのえほん').first()).toBeVisible();
@@ -170,12 +170,12 @@ test('check-in without a barcode: typing the title of a book on the shelf logs i
   await addChild(page, '小明');
   await tab(page, '打卡');
   await button(page, '沒有條碼，自己輸入書名').click();
-  await page.getByPlaceholder('書名').first().fill('手寫的書');
+  await page.getByPlaceholder('書名', { exact: true }).first().fill('手寫的書');
   await button(page, '打卡').click();
   await expect(shown(page, '已幫小明記上「手寫的書」自己看 1 次，也加進全家書架了。').first()).toBeVisible();
 
   await button(page, '沒有條碼，自己輸入書名').click();
-  await page.getByPlaceholder('書名').first().fill('手寫的書');
+  await page.getByPlaceholder('書名', { exact: true }).first().fill('手寫的書');
   await button(page, '打卡').click();
   await expect(shown(page, '已幫小明記上「手寫的書」自己看 1 次。').first()).toBeVisible();
   await expect(shown(page, '今天 2 次 · 共 2 次').first()).toBeVisible();
@@ -188,7 +188,7 @@ test('check in for yesterday, then fix and delete the record', async ({ page }) 
   await button(page, '‹ 前一天').click();
   await expect(shown(page, '昨天').first()).toBeVisible();
   await button(page, '沒有條碼，自己輸入書名').click();
-  await page.getByPlaceholder('書名').first().fill('昨天的書');
+  await page.getByPlaceholder('書名', { exact: true }).first().fill('昨天的書');
   await button(page, '打卡').click();
   await expect(shown(page, '已幫小明記上昨天「昨天的書」自己看 1 次，也加進全家書架了。').first()).toBeVisible();
   await expect(shown(page, '這天 1 次 · 共 1 次').first()).toBeVisible();
@@ -226,7 +226,7 @@ test('check-in lists only the picked child\'s books, and the day\'s records foll
   await addChild(page, '小美');
   await tab(page, '打卡');
   await button(page, '沒有條碼，自己輸入書名').click();
-  await page.getByPlaceholder('書名').first().fill('哥哥的書');
+  await page.getByPlaceholder('書名', { exact: true }).first().fill('哥哥的書');
   await button(page, '打卡').click();
   await expect(shown(page, '小明最近讀的書').first()).toBeVisible();
   await expect(shown(page, '今天的紀錄').first()).toBeVisible();
@@ -249,17 +249,18 @@ test('the bookshelf is one family shelf: a book added once is there for every ch
   await tab(page, '書架');
   await expect(shown(page, '全家的書架').first()).toBeVisible();
   await button(page, '＋ 加一本書').click();
-  await page.getByPlaceholder('書名').fill('大家的書');
+  await page.getByPlaceholder('書名', { exact: true }).fill('大家的書');
   await button(page, '加入全家書架').click();
   await button(page, '收起').click();
   await button(page, '清單').click();
   await expect(shown(page, '還沒有人讀過').first()).toBeVisible();
   await expect(shown(page, '還沒讀 1').first()).toBeVisible();
 
-  // Either child can check it in straight away, and the shelf shows who read it.
+  // Either child can check it in straight away: typing part of the title finds it on the family shelf.
   await tab(page, '打卡');
-  await button(page, '沒有條碼，自己輸入書名').click();
-  await page.getByPlaceholder('書名').first().fill('大家的書');
+  await page.getByPlaceholder('ISBN、條碼或書名').first().fill('大家');
+  await page.getByLabel('選「大家的書」').first().click();
+  await expect(shown(page, '已在全家書架上').first()).toBeVisible();
   await button(page, '🐛 小美').click();
   await button(page, '打卡').click();
   await expect(shown(page, '已幫小美記上「大家的書」自己看 1 次。').first()).toBeVisible();

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BookCover } from '@/components/book-cover';
 import { Button, Field } from '@/components/form';
@@ -14,9 +14,10 @@ import { toDayKey } from '@/data/dates';
 import { findGoogleCover, lookupIsbn } from '@/data/isbn';
 import { LANGUAGES } from '@/data/language';
 import { isbnKey } from '@/data/library';
+import { matchBooks } from '@/data/search';
 import { modeLabel, READING_MODES } from '@/data/status';
 import { useStore, type NewBook } from '@/data/store';
-import type { ReadingMode } from '@/data/types';
+import type { LibraryBook, ReadingMode } from '@/data/types';
 
 const MAX_TIMES = 20;
 
@@ -38,6 +39,20 @@ export function ScanCheckin({ date }: { date?: string }) {
 
   const who = children.find((c) => c.id === childId) ?? activeChild;
   const known = book && library.find((b) => (b.isbn && b.isbn === book.isbn) || b.title === book.title);
+  // Letters in the top box mean a title: offer the family's books as you type.
+  const typedTitle = !book && /[^\d\s-]/.test(isbn) ? isbn : '';
+  const suggestions = typedTitle
+    ? matchBooks(library, typedTitle)
+    : notFound === 'typed' && book && !known
+      ? matchBooks(library, book.title)
+      : [];
+
+  function onPick(picked: LibraryBook) {
+    setDone(undefined);
+    setIsbn('');
+    setNotFound(false);
+    setBook(picked);
+  }
 
   async function onLookup(code = isbn) {
     const clean = isbnKey(code);
@@ -119,14 +134,22 @@ export function ScanCheckin({ date }: { date?: string }) {
       <View style={styles.row}>
         <Field
           style={styles.grow}
-          placeholder="ISBN 或條碼數字"
-          keyboardType="number-pad"
+          placeholder="ISBN、條碼或書名"
           value={isbn}
           onChangeText={setIsbn}
         />
         <Button title="掃描" onPress={() => setScanning(true)} disabled={looking} />
-        <Button title={looking ? '查詢中…' : '查詢'} onPress={() => onLookup()} disabled={!isbn || looking} />
+        <Button title={looking ? '查詢中…' : '查詢'} onPress={() => onLookup()} disabled={!isbn || !!typedTitle || looking} />
       </View>
+      {typedTitle ? (
+        suggestions.length ? (
+          <Suggestions books={suggestions} onPick={onPick} />
+        ) : (
+          <ThemedText type="small" themeColor="textSecondary">
+            書架上找不到「{typedTitle.trim()}」。新書請按「沒有條碼，自己輸入書名」。
+          </ThemedText>
+        )
+      ) : null}
       {notFound !== 'typed' ? (
         <View style={styles.row}>
           <Button title="沒有條碼，自己輸入書名" onPress={onType} />
@@ -155,6 +178,9 @@ export function ScanCheckin({ date }: { date?: string }) {
               {notFound ? (
                 <>
                   <Field placeholder="書名" value={book.title} onChangeText={(title) => setBook({ ...book, title })} />
+                  {notFound === 'typed' && suggestions.length ? (
+                    <Suggestions books={suggestions} onPick={onPick} />
+                  ) : null}
                   <Field
                     placeholder="作者"
                     value={book.author}
@@ -222,10 +248,39 @@ export function ScanCheckin({ date }: { date?: string }) {
   );
 }
 
+/** Family books matching what was typed; tapping one picks it for the check-in. */
+function Suggestions({ books, onPick }: { books: LibraryBook[]; onPick: (book: LibraryBook) => void }) {
+  return (
+    <View style={styles.fields}>
+      <ThemedText type="small" themeColor="textSecondary">
+        書架上的書，點一下選它：
+      </ThemedText>
+      {books.map((b) => (
+        <Pressable key={b.id} onPress={() => onPick(b)} accessibilityRole="button" accessibilityLabel={`選「${b.title}」`}>
+          <ThemedView type="background" style={styles.suggestion}>
+            <BookCover book={b} width={28} />
+            <View style={styles.grow}>
+              <ThemedText type="small" numberOfLines={1}>
+                {b.title}
+              </ThemedText>
+              {b.author ? (
+                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                  {b.author}
+                </ThemedText>
+              ) : null}
+            </View>
+          </ThemedView>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   card: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.two },
   row: { flexDirection: 'row', gap: Spacing.two, alignItems: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   grow: { flex: 1, minWidth: 0 },
   fields: { gap: Spacing.two },
+  suggestion: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.one, borderRadius: Spacing.two },
 });
