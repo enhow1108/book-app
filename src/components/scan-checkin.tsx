@@ -33,13 +33,25 @@ export function ScanCheckin({ date }: { date?: string }) {
   const [notFound, setNotFound] = useState<false | 'isbn' | 'other' | 'typed'>(false);
   const [looking, setLooking] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [childId, setChildId] = useState<string>();
+  // Several children can be picked when they read the book together; the active child until someone is picked.
+  const [childIds, setChildIds] = useState<string[]>();
   const [mode, setMode] = useState<ReadingMode>('self');
   const [times, setTimes] = useState(1);
   const [done, setDone] = useState<string>();
   const [batch, setBatch] = useState(false);
 
-  const who = children.find((c) => c.id === childId) ?? activeChild;
+  const who = childIds
+    ? children.filter((c) => childIds.includes(c.id))
+    : activeChild
+      ? [activeChild]
+      : [];
+
+  // The first tap picks that child alone (as before); further taps add or remove children.
+  function toggleChild(id: string) {
+    if (!childIds) return setChildIds([id]);
+    const ids = who.map((c) => c.id);
+    setChildIds(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
+  }
   const known = book && library.find((b) => (b.isbn && b.isbn === book.isbn) || b.title === book.title);
   // Letters in the top box mean a title: offer the family's books as you type.
   const typedTitle = !book && /[^\d\s-]/.test(isbn) ? isbn : '';
@@ -111,16 +123,19 @@ export function ScanCheckin({ date }: { date?: string }) {
   }
 
   function onCheckIn() {
-    if (!book || !who || !book.title.trim()) return;
-    checkIn({
-      book: { ...book, title: book.title.trim(), author: book.author.trim() },
-      childId: who.id,
-      mode,
-      times,
-      date,
-    });
+    if (!book || !who.length || !book.title.trim()) return;
+    // The last check-in becomes the active child, so go backwards to leave the first one picked active.
+    for (const child of [...who].reverse()) {
+      checkIn({
+        book: { ...book, title: book.title.trim(), author: book.author.trim() },
+        childId: child.id,
+        mode,
+        times,
+        date,
+      });
+    }
     setDone(
-      `已幫${who.name}記上${date && date !== toDayKey(new Date()) ? dayLabel(date) : ''}「${book.title.trim()}」${modeLabel(mode)} ${times} 次${known ? '' : '，也加進全家書架了'}。`,
+      `已幫${who.map((c) => c.name).join('、')}記上${date && date !== toDayKey(new Date()) ? dayLabel(date) : ''}「${book.title.trim()}」${modeLabel(mode)} ${times} 次${known ? '' : '，也加進全家書架了'}。`,
     );
     setBook(undefined);
     setIsbn('');
@@ -218,15 +233,15 @@ export function ScanCheckin({ date }: { date?: string }) {
           </View>
 
           <ThemedText type="small" themeColor="textSecondary">
-            誰讀的？
+            誰讀的？（可以選好幾個）
           </ThemedText>
           <View style={styles.chips}>
             {children.map((c) => (
               <Button
                 key={c.id}
                 title={`${c.avatar} ${c.name}`}
-                selected={c.id === who?.id}
-                onPress={() => setChildId(c.id)}
+                selected={who.some((w) => w.id === c.id)}
+                onPress={() => toggleChild(c.id)}
               />
             ))}
           </View>
@@ -241,7 +256,7 @@ export function ScanCheckin({ date }: { date?: string }) {
             <Button title="＋" onPress={() => setTimes(Math.min(MAX_TIMES, times + 1))} disabled={times >= MAX_TIMES} />
           </View>
           <View style={styles.row}>
-            <Button title="打卡" onPress={onCheckIn} disabled={!book.title.trim() || !who} />
+            <Button title="打卡" onPress={onCheckIn} disabled={!book.title.trim() || !who.length} />
             <Button title="取消" onPress={() => setBook(undefined)} />
           </View>
         </>

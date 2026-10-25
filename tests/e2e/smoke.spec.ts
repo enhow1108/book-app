@@ -145,8 +145,18 @@ test('scan check-in: a new book is logged for the chosen child and joins the fam
   await expect(shown(page, '已幫小美記上「掃描的書」一起看 3 次，也加進全家書架了。').first()).toBeVisible();
   await expect(shown(page, '今天 3 次 · 共 3 次').first()).toBeVisible();
 
+
+  // Children who read together are checked in at once.
+  await button(page, '沒有條碼，自己輸入書名').click();
+  await page.getByPlaceholder('書名', { exact: true }).first().fill('一起的書');
+  await button(page, '🐛 小明').click();
+  await button(page, '打卡').click();
+  await expect(shown(page, '已幫小明、小美記上「一起的書」一起看 1 次，也加進全家書架了。').first()).toBeVisible();
+
   await tab(page, '書架');
   await expect(shown(page, '掃描的書').first()).toBeVisible();
+  await button(page, '清單').click();
+  await expect(shown(page, /小美 1 次 · 小明 1 次|小明 1 次 · 小美 1 次/).first()).toBeVisible();
 });
 
 test('a Japanese magazine barcode (no ISBN) is checked in by hand, and found again the next time', async ({ page }) => {
