@@ -6,16 +6,16 @@ import { BookCover } from '@/components/book-cover';
 import { DayPicker, dayLabel } from '@/components/day-picker';
 import { confirmDestructive } from '@/components/dialogs';
 import { LogEditor } from '@/components/log-editor';
-import { Button } from '@/components/form';
+import { Button, Field } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { pickCoverPhoto } from '@/data/cover-photo';
 import { newestFirst, readCount, toDayKey } from '@/data/dates';
-import { languageLabel } from '@/data/language';
+import { LANGUAGES, languageLabel } from '@/data/language';
 import { modeLabel, READING_MODES, STATUSES } from '@/data/status';
 import { useStore } from '@/data/store';
-import type { ReadingMode } from '@/data/types';
+import type { BookLanguage, ReadingMode } from '@/data/types';
 
 const HISTORY_ROWS = 10;
 const WEEKDAYS = '日一二三四五六';
@@ -33,6 +33,8 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
     useStore();
   const [mode, setMode] = useState<ReadingMode>('self');
   const [showAll, setShowAll] = useState(false);
+  // Fixing the title, author or language; the family library holds one copy, so everyone sees the change.
+  const [editing, setEditing] = useState<{ title: string; author: string; language: BookLanguage }>();
   const [editingLogId, setEditingLogId] = useState<string>();
   // The day the +1 / − buttons add to or take from; today unless another day is picked.
   const [day, setDay] = useState(() => toDayKey(new Date()));
@@ -90,12 +92,58 @@ export function BookDetail({ bookId, onClose }: { bookId: string; onClose: () =>
                 <Button title="拍封面" onPress={() => onPhoto('camera')} />
                 <Button title="換照片" onPress={() => onPhoto('library')} />
               </View>
-              <ThemedText type="subtitle" style={styles.title}>
-                {book.title}
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {[book.author, languageLabel(book.language)].filter(Boolean).join(' · ')}
-              </ThemedText>
+              {editing ? (
+                <View style={styles.edit}>
+                  <Field
+                    placeholder="書名"
+                    value={editing.title}
+                    onChangeText={(title) => setEditing({ ...editing, title })}
+                  />
+                  <Field
+                    placeholder="作者（可不填）"
+                    value={editing.author}
+                    onChangeText={(author) => setEditing({ ...editing, author })}
+                  />
+                  <View style={styles.row}>
+                    {LANGUAGES.map((l) => (
+                      <Button
+                        key={l.value}
+                        title={l.label}
+                        selected={editing.language === l.value}
+                        onPress={() => setEditing({ ...editing, language: l.value })}
+                      />
+                    ))}
+                  </View>
+                  <View style={styles.row}>
+                    <Button
+                      title="儲存"
+                      disabled={!editing.title.trim()}
+                      onPress={() => {
+                        updateBook(book.id, {
+                          title: editing.title.trim(),
+                          author: editing.author.trim(),
+                          language: editing.language,
+                        });
+                        setEditing(undefined);
+                      }}
+                    />
+                    <Button title="取消" onPress={() => setEditing(undefined)} />
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <ThemedText type="subtitle" style={styles.title}>
+                    {book.title}
+                  </ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {[book.author, languageLabel(book.language)].filter(Boolean).join(' · ')}
+                  </ThemedText>
+                  <Button
+                    title="改書名"
+                    onPress={() => setEditing({ title: book.title, author: book.author, language: book.language })}
+                  />
+                </>
+              )}
               {family.length > 1
                 ? family.map((f) => (
                     <Pressable key={f.id} onPress={() => setActiveChild(f.id)} accessibilityRole="button">
@@ -215,6 +263,7 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', justifyContent: 'flex-end' },
   center: { alignItems: 'center', gap: Spacing.two },
   title: { textAlign: 'center' },
+  edit: { alignSelf: 'stretch', gap: Spacing.two },
   row: { flexDirection: 'row', gap: Spacing.two, justifyContent: 'center', flexWrap: 'wrap' },
   card: { padding: Spacing.three, borderRadius: Spacing.three, gap: Spacing.two, alignItems: 'center' },
   history: { alignItems: 'stretch' },

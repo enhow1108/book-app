@@ -298,6 +298,15 @@ test('the bookshelf is one family shelf: a book added once is there for every ch
   await page.getByLabel(`選 ${last.getMonth() + 1} 月 15 日`).first().click();
   await button(page, '+1 次').click();
   await expect(shown(page, new RegExp(`小明.*${last.getMonth() + 1} 月 15 日.*讀了 1 次 · 一共 2 次`)).first()).toBeVisible();
+
+  // The title can be fixed from the book page, and the shelf shows the new one.
+  await button(page, '改書名').click();
+  await page.getByPlaceholder('書名', { exact: true }).fill('大家的新書');
+  await button(page, '儲存').click();
+  await expect(shown(page, '大家的新書').first()).toBeVisible();
+  await button(page, '關閉').click();
+  await expect(shown(page, '大家的新書').first()).toBeVisible();
+  await expect(shown(page, '大家的書')).toHaveCount(0);
 });
 
 test('many books at once: a pile of barcodes is added to the shelf and checked in for one child', async ({ page }) => {
