@@ -159,6 +159,30 @@ test('scan check-in: a new book is logged for the chosen child and joins the fam
   await expect(shown(page, /小美 1 次 · 小明 1 次|小明 1 次 · 小美 1 次/).first()).toBeVisible();
 });
 
+test('a barcode that is not found can be given a shelf book, and the next scan finds that book', async ({ page }) => {
+  await addChild(page, '小明');
+  await tab(page, '書架');
+  await button(page, '＋ 加一本書').click();
+  await page.getByPlaceholder('書名', { exact: true }).fill('寒冬的書');
+  await button(page, '加入全家書架').click();
+
+  await tab(page, '打卡');
+  // A made-up ISBN: lookups are cut off, so it is not found.
+  await page.getByPlaceholder('ISBN、條碼或書名').first().fill('9786660000017');
+  await button(page, '查詢').click();
+  await expect(shown(page, /查不到這本書/).first()).toBeVisible();
+  await page.getByPlaceholder('書名', { exact: true }).filter({ visible: true }).first().fill('寒冬');
+  await page.getByLabel('選「寒冬的書」').first().click();
+  await expect(shown(page, '已在全家書架上').first()).toBeVisible();
+  await button(page, '打卡').click();
+  await expect(shown(page, '已幫小明記上「寒冬的書」自己看 1 次。').first()).toBeVisible();
+
+  await page.getByPlaceholder('ISBN、條碼或書名').first().fill('978-666-000-001-7');
+  await button(page, '查詢').click();
+  await expect(shown(page, '寒冬的書').first()).toBeVisible();
+  await expect(shown(page, '已在全家書架上').first()).toBeVisible();
+});
+
 test('a Japanese magazine barcode (no ISBN) is checked in by hand, and found again the next time', async ({ page }) => {
   await addChild(page, '小明');
   await tab(page, '打卡');

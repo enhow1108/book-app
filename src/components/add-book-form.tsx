@@ -11,7 +11,7 @@ import { isBookBarcode, isIsbn13, isJapaneseProductCode } from '@/data/barcode';
 import { pickCoverPhoto } from '@/data/cover-photo';
 import { findGoogleCover, lookupIsbn } from '@/data/isbn';
 import { LANGUAGES } from '@/data/language';
-import { isbnKey } from '@/data/library';
+import { bookCodes, isbnKey } from '@/data/library';
 import { useStore } from '@/data/store';
 import type { BookLanguage } from '@/data/types';
 
@@ -31,7 +31,7 @@ export function AddBookForm({ onClose }: { onClose: () => void }) {
     setNotFound(false);
     // A book the family already has, found by its barcode; the only way to find books without an ISBN again.
     const key = isbnKey(code);
-    const known = key ? library.find((b) => isbnKey(b.isbn) === key) : undefined;
+    const known = key ? library.find((b) => bookCodes(b).includes(key)) : undefined;
     if (known) {
       setTitle(known.title);
       setAuthor(known.author);
@@ -105,7 +105,7 @@ export function AddBookForm({ onClose }: { onClose: () => void }) {
         <ThemedText type="small" themeColor="textSecondary">
           {notFound === 'other'
             ? '這是雜誌或商品條碼，不是 ISBN，書目資料庫查不到。請自己輸入書名和作者，也可以拍一張封面照片；條碼會一起存起來，下次掃同一本就會直接帶出來。'
-            : '查不到這本書，請自己輸入書名和作者，也可以拍一張封面照片。'}
+            : '查不到這本書，請自己輸入書名和作者，也可以拍一張封面照片；條碼會一起存起來，下次掃同一本就會直接帶出來。'}
         </ThemedText>
       ) : null}
       <View style={styles.row}>

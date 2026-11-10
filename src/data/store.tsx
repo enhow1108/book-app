@@ -15,6 +15,7 @@ import {
   fromLegacy,
   newId,
   shelfId,
+  withCode,
   type LegacyState,
   type State,
 } from './library';
@@ -292,7 +293,7 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
         // A book the family already has is shared rather than added twice.
         const same = findSameBook(s.books, book);
         const library: LibraryBook = same
-          ? { ...same, coverUrl: same.coverUrl ?? book.coverUrl, author: same.author || book.author }
+          ? withCode({ ...same, coverUrl: same.coverUrl ?? book.coverUrl, author: same.author || book.author }, book.isbn)
           : { ...book, id: newId(), addedAt };
         const books = same ? s.books.map((b) => (b.id === same.id ? library : b)) : [library, ...s.books];
         // Without a status the book only joins the family shelf; a child's own shelf gets it when they read it.
@@ -354,9 +355,14 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
         // The same book the family already has (by ISBN, else title) is read again rather than added twice.
         const same = findSameBook(s.books, book);
         const library: LibraryBook = same
-          ? { ...same, coverUrl: same.coverUrl ?? book.coverUrl, author: same.author || book.author }
+          ? withCode({ ...same, coverUrl: same.coverUrl ?? book.coverUrl, author: same.author || book.author }, book.isbn)
           : { ...book, id: newId(), addedAt: new Date().toISOString() };
-        const changed = !same || library.coverUrl !== same.coverUrl || library.author !== same.author;
+        const changed =
+          !same ||
+          library.coverUrl !== same.coverUrl ||
+          library.author !== same.author ||
+          library.isbn !== same.isbn ||
+          library.codes !== same.codes;
         // Only a changed book is replaced, so sync doesn't upload it again for nothing.
         const books = !changed
           ? s.books
@@ -383,8 +389,10 @@ export function StoreProvider({ children: content }: { children: ReactNode }) {
             continue;
           }
           const same = changed.get(found.id) ?? added.find((b) => b.id === found.id) ?? found;
-          if (!same.coverUrl && book.coverUrl) {
-            const filled = { ...same, coverUrl: book.coverUrl };
+          // A scanned barcode the book wasn't known by is remembered, so the next scan finds it.
+          const coded = withCode(same, book.isbn);
+          if ((!same.coverUrl && book.coverUrl) || coded !== same) {
+            const filled = { ...coded, coverUrl: same.coverUrl ?? book.coverUrl };
             const i = added.indexOf(same);
             if (i >= 0) added[i] = filled;
             else changed.set(same.id, filled);

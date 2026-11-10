@@ -14,7 +14,7 @@ import { pickCoverPhoto } from '@/data/cover-photo';
 import { toDayKey } from '@/data/dates';
 import { findGoogleCover, lookupIsbn } from '@/data/isbn';
 import { LANGUAGES } from '@/data/language';
-import { isbnKey } from '@/data/library';
+import { bookCodes, findSameBook, isbnKey, withCode } from '@/data/library';
 import { matchBooks } from '@/data/search';
 import { modeLabel, READING_MODES } from '@/data/status';
 import { useStore, type NewBook } from '@/data/store';
@@ -52,20 +52,21 @@ export function ScanCheckin({ date }: { date?: string }) {
     const ids = who.map((c) => c.id);
     setChildIds(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   }
-  const known = book && library.find((b) => (b.isbn && b.isbn === book.isbn) || b.title === book.title);
+  const known = book && (book.title.trim() || book.isbn) ? findSameBook(library, book) : undefined;
   // Letters in the top box mean a title: offer the family's books as you type.
   const typedTitle = !book && /[^\d\s-]/.test(isbn) ? isbn : '';
   const suggestions = typedTitle
     ? matchBooks(library, typedTitle)
-    : notFound === 'typed' && book && !known
+    : notFound && book && !known
       ? matchBooks(library, book.title)
       : [];
 
+  // Picking a family book for a barcode that wasn't found keeps that barcode, so the next scan finds the book.
   function onPick(picked: LibraryBook) {
     setDone(undefined);
     setIsbn('');
     setNotFound(false);
-    setBook(picked);
+    setBook(book?.isbn ? withCode(picked, book.isbn) : picked);
   }
 
   async function onLookup(code = isbn) {
@@ -74,7 +75,7 @@ export function ScanCheckin({ date }: { date?: string }) {
     setDone(undefined);
     setNotFound(false);
     // A book already on the family shelf needs no lookup.
-    const own = library.find((b) => isbnKey(b.isbn) === clean);
+    const own = library.find((b) => bookCodes(b).includes(clean));
     if (own) {
       setBook(own);
       return;
@@ -186,8 +187,8 @@ export function ScanCheckin({ date }: { date?: string }) {
               {notFound === 'typed'
                 ? '輸入書名。書架上已經有的書會直接記上，新書會加進全家書架。'
                 : notFound === 'other'
-                ? '這是雜誌或商品條碼，不是 ISBN，查不到書名。請輸入書名，打卡後會加進全家書架，下次掃同一本就會直接帶出來。'
-                : '查不到這本書，請輸入書名，打卡後會加進全家書架。'}
+                ? '這是雜誌或商品條碼，不是 ISBN，查不到書名。請輸入書名（書架上有的書可以從下面選），打卡後下次掃同一個條碼就會直接帶出來。'
+                : '查不到這本書。請輸入書名（書架上有的書可以從下面選），打卡後下次掃同一個條碼就會直接帶出來。'}
             </ThemedText>
           ) : null}
           <View style={styles.row}>
@@ -196,7 +197,7 @@ export function ScanCheckin({ date }: { date?: string }) {
               {notFound ? (
                 <>
                   <Field placeholder="書名" value={book.title} onChangeText={(title) => setBook({ ...book, title })} />
-                  {notFound === 'typed' && suggestions.length ? (
+                  {suggestions.length ? (
                     <Suggestions books={suggestions} onPick={onPick} />
                   ) : null}
                   <Field

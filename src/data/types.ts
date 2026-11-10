@@ -24,6 +24,8 @@ export type LibraryBook = {
   author: string;
   language: BookLanguage;
   isbn?: string;
+  /** Other barcodes typed in for this book, e.g. another edition's ISBN or a magazine code, so scanning them finds it. */
+  codes?: string[];
   /** A web address, or a cover photo stored as a JPEG data URI. */
   coverUrl?: string;
   publisher?: string;

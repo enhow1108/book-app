@@ -5,6 +5,7 @@ import type { Changes, Row, Table } from '@/data/database-types';
 import { planImport } from '@/data/importer';
 import { planRestore, backupJson } from '@/data/backup';
 import { toDayKey } from '@/data/dates';
+import { bookCodes, findSameBook } from '@/data/library';
 import { StoreProvider, useStore } from '@/data/store';
 
 import { book, child, fixture, reads, shelved, state } from './helpers';
@@ -290,4 +291,32 @@ test('a pile of scanned books can be checked in for one child at once', async ()
   await flush();
   expect(mockDb.tables.logs.size).toBe(2);
   expect(mockDb.tables.books.size).toBe(2);
+});
+
+test('a barcode scanned for a family book it was not known by is remembered for the next scan', async () => {
+  const { result } = await openStore(
+    state({ ...twoKids, books: [book('old', '寒冬用品店'), book('ed1', 'Moon', { isbn: '9780000000011' })] }),
+  );
+  // Check-in: the title typed for an unknown barcode matches an imported book without an ISBN.
+  await act(() =>
+    result.current.checkIn({
+      book: { title: '寒冬用品店', author: '', language: 'zh', isbn: '9789990000019' },
+      childId: 'k1',
+      mode: 'self',
+      times: 1,
+    }),
+  );
+  expect(result.current.library).toHaveLength(2);
+  expect(result.current.library.find((b) => b.id === 'old')?.isbn).toBe('9789990000019');
+
+  // A different edition's ISBN, added from the shelf, joins the book as another code.
+  await act(() => result.current.addBook({ title: 'Moon', author: '', language: 'en', isbn: '9780000000028' }));
+  const moon = result.current.library.find((b) => b.id === 'ed1')!;
+  expect(bookCodes(moon)).toEqual(['9780000000011', '9780000000028']);
+  expect(findSameBook(result.current.library, { title: '', isbn: '978-0-00-000002-8' })?.id).toBe('ed1');
+
+  // Many at once: a magazine code typed with a known title is remembered too.
+  await act(() => result.current.addBooks([{ title: 'moon', author: '', language: 'en', isbn: '4910123450650' }]));
+  expect(bookCodes(result.current.library.find((b) => b.id === 'ed1')!)).toContain('4910123450650');
+  expect(result.current.library).toHaveLength(2);
 });

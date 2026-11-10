@@ -29,13 +29,25 @@ export function titleKey(title: string): string {
 
 export const isbnKey = (isbn?: string) => isbn?.replace(/[^0-9xX]/g, '').toUpperCase() || undefined;
 
+/** Every barcode a book is found by: its ISBN and any other codes remembered for it. */
+export function bookCodes(book: { isbn?: string; codes?: string[] }): string[] {
+  const own = isbnKey(book.isbn);
+  return own ? [own, ...(book.codes ?? [])] : (book.codes ?? []);
+}
+
+/** The book, remembering a scanned barcode it wasn't found by: as its ISBN if it has none, else as another code. */
+export function withCode<B extends LibraryBook>(book: B, code?: string): B {
+  const key = isbnKey(code);
+  if (!key || bookCodes(book).includes(key)) return book;
+  return book.isbn ? { ...book, codes: [...(book.codes ?? []), key] } : { ...book, isbn: key };
+}
+
 /** Looks up books by ISBN and title; for matching thousands of imported books against the library. */
 export function bookFinder(books: LibraryBook[]) {
   const byIsbn = new Map<string, LibraryBook>();
   const byTitle = new Map<string, LibraryBook[]>();
   const add = (b: LibraryBook) => {
-    const isbn = isbnKey(b.isbn);
-    if (isbn && !byIsbn.has(isbn)) byIsbn.set(isbn, b);
+    for (const code of bookCodes(b)) if (!byIsbn.has(code)) byIsbn.set(code, b);
     const key = titleKey(b.title);
     byTitle.set(key, [...(byTitle.get(key) ?? []), b]);
   };

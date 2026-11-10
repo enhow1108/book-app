@@ -10,7 +10,7 @@ import { Spacing } from '@/constants/theme';
 import { isJapaneseProductCode } from '@/data/barcode';
 import { addScan, readyBooks, type ScanItem } from '@/data/batch-scan';
 import { findGoogleCover, lookupIsbn } from '@/data/isbn';
-import { findSameBook, isbnKey } from '@/data/library';
+import { bookCodes, findSameBook, isbnKey } from '@/data/library';
 import { modeLabel, READING_MODES } from '@/data/status';
 import { useStore } from '@/data/store';
 import type { ReadingMode } from '@/data/types';
@@ -39,7 +39,7 @@ export function BatchScan({ onClose, date }: { onClose: () => void; date?: strin
     setItems((list) => list.map((i) => (i.code === code ? patch(i) : i)));
 
   async function lookUp(code: string) {
-    const own = library.find((b) => isbnKey(b.isbn) === code);
+    const own = library.find((b) => bookCodes(b).includes(code));
     if (own) {
       const { title, author, language, coverUrl } = own;
       return update(code, (i) => ({ ...i, status: 'known', book: { ...i.book, title, author, language, coverUrl } }));
