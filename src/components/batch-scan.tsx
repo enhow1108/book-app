@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BookCover } from '@/components/book-cover';
 import { Button, Field } from '@/components/form';
@@ -9,8 +9,10 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { isJapaneseProductCode } from '@/data/barcode';
 import { addScan, readyBooks, type ScanItem } from '@/data/batch-scan';
+import { pickCoverPhoto } from '@/data/cover-photo';
 import { findGoogleCover, lookupIsbn } from '@/data/isbn';
 import { bookCodes, findSameBook, isbnKey } from '@/data/library';
+import { matchBooks } from '@/data/search';
 import { modeLabel, READING_MODES } from '@/data/status';
 import { useStore } from '@/data/store';
 import type { ReadingMode } from '@/data/types';
@@ -19,7 +21,7 @@ const STATUS_TEXT: Record<ScanItem['status'], string> = {
   looking: '查詢中…',
   known: '已在全家書架上',
   found: '新書',
-  missing: '查不到，請輸入書名',
+  missing: '查不到，請輸入書名，也可以拍封面',
 };
 
 /**
@@ -58,6 +60,11 @@ export function BatchScan({ onClose, date }: { onClose: () => void; date?: strin
       const cover = await findGoogleCover({ title: found.title }).catch(() => null);
       if (cover && cover !== 'quota') update(code, (i) => ({ ...i, book: { ...i.book, coverUrl: i.book.coverUrl ?? cover } }));
     }
+  }
+
+  async function onPhoto(code: string, from: 'camera' | 'library') {
+    const photo = await pickCoverPhoto(from);
+    if (photo) update(code, (i) => ({ ...i, book: { ...i.book, coverUrl: photo } }));
   }
 
   function onCode(raw: string) {
@@ -140,11 +147,43 @@ export function BatchScan({ onClose, date }: { onClose: () => void; date?: strin
               />
               <View style={[styles.grow, styles.fields]}>
                 {item.status === 'missing' ? (
-                  <Field
-                    placeholder="書名"
-                    value={item.book.title}
-                    onChangeText={(title) => update(item.code, (i) => ({ ...i, book: { ...i.book, title } }))}
-                  />
+                  <>
+                    <Field
+                      placeholder="書名"
+                      value={item.book.title}
+                      onChangeText={(title) => update(item.code, (i) => ({ ...i, book: { ...i.book, title } }))}
+                    />
+                    {/* A book the family already has, picked by title, keeps this barcode for the next scan. */}
+                    {matchBooks(library, item.book.title, 4)
+                      .filter((b) => b.title !== item.book.title)
+                      .map((b) => (
+                        <Pressable
+                          key={b.id}
+                          accessibilityRole="button"
+                          accessibilityLabel={`選「${b.title}」`}
+                          onPress={() =>
+                            update(item.code, (i) => ({
+                              ...i,
+                              status: 'known',
+                              book: {
+                                ...i.book,
+                                title: b.title,
+                                author: b.author,
+                                language: b.language,
+                                coverUrl: b.coverUrl ?? i.book.coverUrl,
+                              },
+                            }))
+                          }>
+                          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                            書架上的「{b.title}」？點一下選它
+                          </ThemedText>
+                        </Pressable>
+                      ))}
+                    <View style={styles.chips}>
+                      <Button title="拍封面" onPress={() => onPhoto(item.code, 'camera')} />
+                      <Button title="選照片" onPress={() => onPhoto(item.code, 'library')} />
+                    </View>
+                  </>
                 ) : (
                   <ThemedText type="smallBold" numberOfLines={2}>
                     {item.book.title || item.code}

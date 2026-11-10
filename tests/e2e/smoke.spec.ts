@@ -352,7 +352,7 @@ test('many books at once: a pile of barcodes is added to the shelf and checked i
   }
   await expect(shown(page, '已掃 3 本').first()).toBeVisible();
   await expect(shown(page, '已在全家書架上').first()).toBeVisible();
-  await expect(shown(page, '查不到，請輸入書名（條碼 9786660000017）').first()).toBeVisible();
+  await expect(shown(page, '查不到，請輸入書名，也可以拍封面（條碼 9786660000017）').first()).toBeVisible();
   // Lookups are cut off, so the two new barcodes need titles (newest scan first); one is left blank and is skipped.
   await page.getByPlaceholder('書名', { exact: true }).filter({ visible: true }).nth(1).fill('新來的書');
   await expect(button(page, '加入全家書架（2 本）')).toBeVisible();
@@ -365,4 +365,23 @@ test('many books at once: a pile of barcodes is added to the shelf and checked i
   await expect(shown(page, '全部 2').first()).toBeVisible();
   await expect(shown(page, '新來的書').first()).toBeVisible();
   await expect(shown(page, '小美 1 次').first()).toBeVisible();
+
+  // Next time the same barcode is found; an unknown one can be matched to a shelf book by title.
+  await button(page, '一次掃很多本').click();
+  for (const c of ['9786660000017', '9786660000031']) {
+    await code.fill(c);
+    await button(page, '加入清單').click();
+  }
+  await expect(shown(page, '新來的書').first()).toBeVisible();
+  await expect(button(page, '拍封面')).toBeVisible();
+  await page.getByPlaceholder('書名', { exact: true }).filter({ visible: true }).first().fill('書架上');
+  await page.getByLabel('選「書架上的書」').first().click();
+  await expect(shown(page, '已在全家書架上')).toHaveCount(2);
+  await button(page, '只加進書架').click();
+  await button(page, '加入全家書架（2 本）').click();
+  await button(page, '一次掃很多本').click();
+  await code.fill('9786660000031');
+  await button(page, '加入清單').click();
+  await expect(shown(page, '書架上的書').first()).toBeVisible();
+  await expect(shown(page, '已在全家書架上').first()).toBeVisible();
 });
